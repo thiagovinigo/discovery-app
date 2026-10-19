@@ -232,6 +232,12 @@ export const App: React.FC = () => {
     setActiveView(targetView);
   };
 
+  const handleStartFirstSession = () => {
+    storageService.createNewSession(activeProject.id);
+    setActiveProject({ ...storageService.getActiveProject() });
+    setProjects(storageService.getAllProjects());
+  };
+
   const handleCreateProject = (name: string, description: string) => {
     const newProj = storageService.createNewProject(name, description);
     setProjects(storageService.getAllProjects());
@@ -930,6 +936,20 @@ export const App: React.FC = () => {
             activeSession={currentSession}
             onNavigateToView={(view) => setActiveView(view)}
           />
+        )}
+
+        {/* VIEW 1: LIVE ROOM — projeto ainda sem nenhuma sessão */}
+        {activeView === 'live_room' && !currentSession && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', padding: '64px 16px', textAlign: 'center' }}>
+            <Radio size={32} />
+            <h2 style={{ margin: 0 }}>Nenhuma sessão de discovery neste projeto</h2>
+            <p style={{ margin: 0, maxWidth: '460px', color: 'var(--text-muted)' }}>
+              Crie a primeira sessão para gravar, digitar notas ou importar uma transcrição.
+            </p>
+            <button className="btn btn-primary" onClick={handleStartFirstSession}>
+              <Plus size={14} /> Iniciar primeira sessão
+            </button>
+          </div>
         )}
 
         {/* VIEW 1: LIVE ROOM */}
