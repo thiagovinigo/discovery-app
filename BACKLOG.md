@@ -114,6 +114,39 @@ Hoje toda sala é tratada como entrevista de discovery: as perguntas sugeridas, 
 
 Perguntas em aberto (PO): outros tipos além dos três (retrospectiva, 1:1, planejamento)? O mapa mental e o fluxo do usuário aparecem só em discovery? O tipo pode mudar no meio da sala?
 
+### Épico E8: Backlog vivo, com fatiar, mesclar, atualizar, incrementar, validar e verificar (pedido do PO)
+
+Pedido: o backlog deve aceitar **fatiamento, merge, atualização e incremento** em todos os níveis (épico, feature, história **e task**), e a **cada reunião** deve haver **validação** e **verificação**.
+
+**Onde estamos hoje** (código lido, não suposição):
+- O `planBacklogMerge` (E3.5) faz **incremento** e **atualização com confirmação tudo-ou-nada** em épico, feature, história e OKR. **Task não é mesclada por conta própria**: só entra como parte da história (uma task nova numa história existente conta como "história alterada").
+- **Não existe** fatiamento no modelo de dados: o Fatiador SPIDR (`refine` e `agent_studio`) gera texto solto e não cria histórias filhas nem guarda de onde vieram.
+- **Não existe** merge de itens duplicados nem desfazer.
+- A história tem uma única `evidenceQuote`; épico, feature e task não têm evidência. **Não há estado de validação nem de verificação** em nenhum nível, e nada liga um item à reunião que o originou ou o contestou.
+
+**Definições propostas** (a confirmar pelo PO; ver "Decisões pendentes"):
+- **Validação** responde "isso é uma necessidade real?". Cada item tem um estado: `hipótese` (veio da IA ou do PM, sem evidência), `validado` (uma reunião o confirmou, com citação, reunião e minuto), `contestado` (uma fala o contradiz) ou `invalidado`.
+- **Verificação** responde "o item está bem formado e pronto?". São checagens de qualidade: INVEST, critérios Gherkin completos e testáveis, DoR/DoD, tasks que cobrem os critérios, estimativa, dependências. O resultado é uma lista de lacunas por item e um "pronto para dev?".
+- **Revisão do backlog por reunião**: ao encerrar a sala (ou por botão), o app monta um pacote de **propostas tipadas** (incremento, atualização com diff por campo, fatiamento, merge de duplicados, validação, verificação). O usuário **aceita ou rejeita cada proposta**, e o motor aplica só as aceitas, registrando reunião, citação e data.
+
+| ID | Item | Esforço | Risco | Depende de | Aceite |
+|---|---|---|---|---|---|
+| E8.1 | **Modelo comum de item de backlog** nos 4 níveis: `origin` (sessão, citação, autor: IA ou usuário), `validation` (estado e evidências), `verification` (checagens e data), `sliceOf` (item de origem do fatiamento) e `changes[]` (histórico). Migração: dados antigos assumem `hipótese`, sem origem | M | M | E3.2 | Projeto antigo abre sem perder nada; todo item novo nasce com origem e estado de validação |
+| E8.2 | **Motor de merge em 4 níveis**, incluindo **task** como item próprio (hoje é só parte da história). Operações: incrementar, atualizar (diff por campo), mesclar duplicados (por título semelhante), aceitar **item a item** em vez de tudo-ou-nada. Evolui `planBacklogMerge` (E3.5) | M | M | E8.1 | Uma task nova entra numa história existente sem marcá-la como alterada; cada mudança proposta pode ser aceita ou rejeitada sozinha |
+| E8.3 | **Fatiamento em 4 níveis**: épico em features, feature em histórias, história em histórias menores (SPIDR) e história em tasks, com `sliceOf`, critérios e evidência redistribuídos. Integra o Fatiador ao backlog e elimina a duplicação entre `refine` e `agent_studio` (E6.2) | G | A | E8.1, E8.2 | Fatiar uma história cria filhas com rastreio ao original, sem perder critério nem citação; o total de pontos é conferido |
+| E8.4 | **Revisão do backlog por reunião**: pacote de propostas ao encerrar a sala, tela de revisão com aceitar/rejeitar, aplicação pelo motor do E8.2. O que a revisão propõe depende do **tipo de conversa** (E7): discovery propõe incrementos e validações; alinhamento, atualizações e decisões; refinamento, fatiamento e verificação | G | M | E8.2, E7.1 | Ao encerrar uma sala, aparece o pacote; nada muda no backlog sem aceite |
+| E8.5 | **Validação por reunião**: a análise liga falas a itens (confirma ou contesta), cada ligação guarda citação, reunião e minuto; indicadores no backlog (validados, hipóteses, contestados) | M | M | E8.1, E8.4 | Uma fala que confirma uma história a marca como validada, com a citação visível; uma fala contrária a marca como contestada |
+| E8.6 | **Verificação por reunião**: checagens determinísticas (INVEST, Gherkin completo, DoR/DoD, tasks vs critérios), mais sugestões da IA; "pronto para dev?" por item | M | B | E8.1 | Uma história sem critério de aceite aparece com a lacuna listada e não fica "pronta para dev" |
+| E8.7 | **Histórico e desfazer**: cada aplicação grava um instantâneo antes de mudar o backlog, com botão para desfazer a última revisão, e o histórico por item é visível | M | M | E8.1 | Desfazer devolve o backlog exatamente ao estado anterior à revisão |
+| E8.8 | Exportações (Jira, GitHub, Linear, PRD, SPEC) incluem estado de validação, origem e `sliceOf`; itens `invalidado` ficam de fora por padrão | P | B | E8.1, E6.2 | O export de um item validado traz a citação de origem |
+
+**Decisões pendentes (PO)**
+1. As definições de **validação** e **verificação** acima estão certas? Em especial: validação é sobre a **necessidade** (evidência de reunião) e verificação é sobre a **qualidade do item**.
+2. A revisão aceita **proposta por proposta** (recomendado) ou também em **pacote único**, com "aceitar tudo"?
+3. **Desfazer** (E8.7) é obrigatório já na primeira versão? Recomendo que sim, porque a IA passa a alterar o backlog.
+4. Itens `contestado` ou `invalidado` **somem** do backlog ou ficam visíveis, marcados?
+5. A **ordem**: sugiro E8.1 e E8.2 antes de E4.3 (quebrar o `App`) e E4.2 (router), porque são eles que mudam o que o produto faz. E8.4 vem junto do E7.1, que define o tipo de conversa.
+
 ### Fase 4: Acabamento (depois)
 
 - Acessibilidade: `role="dialog"` e foco preso nos modais, `role="tab"` e `aria-selected` nas abas, `role="status"` no toast, `<label htmlFor>` nos inputs.
