@@ -1,6 +1,21 @@
 # Backlog: Discovery ao Done
 
-Gerado a partir de três diagnósticos (arquitetura, revisão React, mapa de produto) e consolidado em duas visões: **PO** (o que o produto precisa garantir) e **PM** (em que ordem entregar). Status de todos os itens: `Pendente`.
+Gerado a partir de três diagnósticos (arquitetura, revisão React, mapa de produto) e consolidado em duas visões: **PO** (o que o produto precisa garantir) e **PM** (em que ordem entregar). Itens sem marca abaixo estão `Pendente`.
+
+## Progresso
+
+| Item | Status |
+|---|---|
+| E1.1 Remover a chave do código | Código feito; **revogar a chave no painel da OpenAI continua com o dono do projeto** |
+| E1.2 App abre sem chave | Feito (fallback vazio, análise offline) |
+| E1.3 Aviso do `localStorage` | Feito |
+| E2.1 Git | Feito (remote `origin`, branch `main`) |
+| E2.2 Vitest | Feito (`npm test`, `npm run coverage`) |
+| E2.3 Testes de caracterização | Feito: `storageService` 81%, `exportService` 97%, `parseJsonLoose` coberto |
+| E2.4 Backup JSON | Já existia no `ApiKeyModal`; agora com teste do ciclo exportar e reimportar. Só `id`, `name` e `updatedAt` mudam na importação |
+| Fix: Sala ao Vivo em branco em projeto sem sessão | Feito (estado vazio com botão "Iniciar primeira sessão") |
+
+O teste `it.fails` de `addBugReport` (em `storageService.test.ts`) documenta o bug de E3.2 e deve virar teste normal quando E3.2 for corrigido.
 
 Esforço: P (pequeno), M (médio), G (grande). Risco: B (baixo), M (médio), A (alto).
 
@@ -47,6 +62,7 @@ Esforço: P (pequeno), M (médio), G (grande). Risco: B (baixo), M (médio), A (
 | E3.2 | Storage respeita `projectId` e para de mutar (`storageService.ts:326-386`) | M | A | E2.3 | Teste com 2 projetos: um não afeta o outro |
 | E3.3 | Ler do IndexedDB quando o `localStorage` estiver vazio ou sem espaço | M | M | E3.2 | Com `localStorage` limpo, os projetos voltam |
 | E3.4 | Completar deps dos atalhos de teclado (`App.tsx:113-156`) | P | B | - | `npm run lint` sem erro de hooks |
+| E3.6 | Evitar colisão de ids: `'proj-' + Date.now()` (e `sess-`, `bug-`) repete o id quando dois itens nascem no mesmo milissegundo. Usar `crypto.randomUUID()` | P | M | E3.2 | Dois projetos criados em sequência têm ids diferentes |
 | E3.5 | Gerador de backlog faz merge: acrescenta itens novos direto; pede confirmação só ao substituir ou alterar itens existentes | M | M | E3.2 | Backlog existente preservado; incrementos não pedem confirmação |
 
 ### Fase 2: Arquitetura (Sprints 3-4)
@@ -67,6 +83,7 @@ Esforço: P (pequeno), M (médio), G (grande). Risco: B (baixo), M (médio), A (
 | E6.1 | Navegação em 5 áreas (Visão, Captura, Análise, Backlog, Entrega) + menu Copiloto & Biblioteca | M | M | E4.2 | Um único menu (Sidebar ou Header) |
 | E6.2 | Remover sobreposições: SPIDR só em `refine`, cada exportação (Jira, SPEC.md, PRD) em uma única tela, resumo só em `meetings` | M | M | E6.1 | Cada função existe em uma só tela |
 | E6.3 | Fundir `po_space` e `product_audit` no Copiloto com papéis claros; `agent_studio` mantém agentes e crawler, sem as funções duplicadas; `knowledge_hub` vira Biblioteca | G | A | E5.2 | Usuário identifica o papel de cada agente; nada removido |
+| E6.5 | Parar de exportar conteúdo fixo no PRD: `exportToPRD` escreve aprovações fictícias (Product Lead, Tech Lead, CFO com nomes e "Aprovado"), roadmap de conciliação financeira, DoR/DoD e não-audiência iguais para qualquer projeto. Gerar só a partir dos dados do projeto, com campos vazios quando faltar informação | M | M | - | PRD de um projeto novo não contém nomes, aprovações nem roadmap que o usuário não escreveu |
 | E6.4 | Gerar o backlog a partir de várias sessões selecionadas | M | M | E3.5 | Dá para escolher N sessões como entrada |
 
 ### Fase 4: Acabamento (depois)
