@@ -88,13 +88,21 @@ export const App: React.FC = () => {
     noticeTimerRef.current = setTimeout(() => setNotice(null), 8000);
   }, []);
 
-  // Initialize projects from storage
+  // Initialize projects from storage. Antes de ler, recupera do IndexedDB o que o localStorage perdeu.
   useEffect(() => {
-    const all = storageService.getAllProjects();
-    setProjects(all);
-    const active = storageService.getActiveProject();
-    setActiveProject(active);
-  }, []);
+    let cancelled = false;
+    (async () => {
+      const restored = await storageService.restoreFromIndexedDb();
+      // Avisa mesmo se esta execução foi cancelada: no StrictMode a seguinte já encontraria tudo restaurado
+      if (restored) showNotice('info', 'Seus projetos foram recuperados da cópia de segurança do navegador.');
+      if (cancelled) return;
+      setProjects(storageService.getAllProjects());
+      setActiveProject(storageService.getActiveProject());
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showNotice]);
 
   // Scroll to top automatically whenever activeView changes
   useEffect(() => {

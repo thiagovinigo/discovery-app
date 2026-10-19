@@ -17,6 +17,11 @@ function newId(prefix: string): string {
   return `${prefix}-${unique}`;
 }
 
+// Gravações no IndexedDB entram numa fila para não se atropelarem: vale sempre a última.
+let mirrorQueue: Promise<void> = Promise.resolve();
+// Quando o localStorage estoura a cota, o que acabou de ser salvo fica aqui para as leituras seguintes.
+let quotaFallback: DiscoveryProject[] | null = null;
+
 export const storageService = {
   getAiProvider(): 'openai' | 'gemini' {
     const p = localStorage.getItem(STORAGE_KEY_AI_PROVIDER);
@@ -99,7 +104,7 @@ export const storageService = {
 
   getAllProjects(): DiscoveryProject[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEY_PROJECTS);
+      const data = quotaFallback ? JSON.stringify(quotaFallback) : localStorage.getItem(STORAGE_KEY_PROJECTS);
       if (!data) {
         const initial = [INITIAL_MOCK_PROJECT];
         this.saveAllProjects(initial);
@@ -130,11 +135,12 @@ export const storageService = {
   saveAllProjects(projects: DiscoveryProject[]) {
     try {
       localStorage.setItem(STORAGE_KEY_PROJECTS, JSON.stringify(projects));
-      this.mirrorToIndexedDb(projects);
-    } catch (e: any) {
-      console.warn('Aviso: localStorage atingiu o limite de cota. Salvando cópia integral em IndexedDB:', e);
-      this.mirrorToIndexedDb(projects);
+      quotaFallback = null;
+    } catch (e: unknown) {
+      console.warn('Aviso: localStorage atingiu o limite de cota. Mantendo cópia em memória e no IndexedDB:', e);
+      quotaFallback = JSON.parse(JSON.stringify(projects)) as DiscoveryProject[];
     }
+    void this.mirrorToIndexedDb(projects);
   },
 
   getActiveProject(): DiscoveryProject {
@@ -404,38 +410,89 @@ export const storageService = {
     return newSession;
   },
 
-  /** Espelha dados silenciosamente no IndexedDB para contornar limites de cota do localStorage */
-  async mirrorToIndexedDb(projects: DiscoveryProject[]): Promise<void> {
-    try {
-      const db = await openIndexedDb();
-      if (!db) return;
-      const tx = db.transaction(INDEXED_DB_STORE, 'readwrite');
-      const store = tx.objectStore(INDEXED_DB_STORE);
-      for (const p of projects) {
-        store.put(p);
-      }
-    } catch (err) {
-      console.warn('Falha silenciosa ao espelhar no IndexedDB:', err);
-    }
+  /**
+   * Espelha os projetos no IndexedDB, substituindo o conteúdo anterior (assim exclusões também
+   * chegam lá). As gravações rodam em fila; a promessa resolve quando esta já foi concluída.
+   */
+  mirrorToIndexedDb(projects: DiscoveryProject[]): Promise<void> {
+    mirrorQueue = mirrorQueue.then(() => writeAllToIndexedDb(projects));
+    return mirrorQueue;
   },
 
-  /** Recupera projetos salvos no IndexedDB caso o localStorage tenha sido limpo */
+  /** Espera todas as gravações pendentes no IndexedDB terminarem. */
+  flushMirror(): Promise<void> {
+    return mirrorQueue;
+  },
+
+  /** Lê todos os projetos espelhados no IndexedDB. Devolve lista vazia se não houver suporte ou der erro. */
   async getProjectsFromIndexedDb(): Promise<DiscoveryProject[]> {
     try {
       const db = await openIndexedDb();
       if (!db) return [];
-      return new Promise((resolve) => {
-        const tx = db.transaction(INDEXED_DB_STORE, 'readonly');
-        const store = tx.objectStore(INDEXED_DB_STORE);
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = () => resolve([]);
+      return await new Promise<DiscoveryProject[]>((resolve) => {
+        const request = db.transaction(INDEXED_DB_STORE, 'readonly').objectStore(INDEXED_DB_STORE).getAll();
+        request.onsuccess = () => { db.close(); resolve((request.result as DiscoveryProject[]) || []); };
+        request.onerror = () => { db.close(); resolve([]); };
       });
     } catch {
       return [];
     }
+  },
+
+  /**
+   * Traz do IndexedDB os projetos que faltam no localStorage (ex.: dados do site limpos) ou que lá
+   * estão mais novos (ex.: a última gravação estourou a cota). Projetos só locais são mantidos.
+   * Devolve true se o localStorage foi atualizado.
+   */
+  async restoreFromIndexedDb(): Promise<boolean> {
+    const mirrored = await this.getProjectsFromIndexedDb();
+    if (mirrored.length === 0) return false;
+
+    let local: DiscoveryProject[] = [];
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_PROJECTS);
+      local = raw ? (JSON.parse(raw) as DiscoveryProject[]) : [];
+    } catch {
+      local = [];
+    }
+
+    const byId = new Map(local.map(p => [p.id, p]));
+    let changed = false;
+    for (const project of mirrored) {
+      const current = byId.get(project.id);
+      if (!current || (project.updatedAt ?? '') > (current.updatedAt ?? '')) {
+        byId.set(project.id, project);
+        changed = true;
+      }
+    }
+    if (!changed) return false;
+
+    this.saveAllProjects([...byId.values()]);
+    return true;
   }
 };
+
+/** Troca o conteúdo do IndexedDB pelos projetos recebidos, em uma única transação. */
+async function writeAllToIndexedDb(projects: DiscoveryProject[]): Promise<void> {
+  try {
+    const db = await openIndexedDb();
+    if (!db) return;
+    await new Promise<void>((resolve) => {
+      const tx = db.transaction(INDEXED_DB_STORE, 'readwrite');
+      const store = tx.objectStore(INDEXED_DB_STORE);
+      store.clear();
+      for (const project of projects) store.put(project);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = tx.onabort = () => {
+        console.warn('Falha ao espelhar no IndexedDB:', tx.error);
+        db.close();
+        resolve();
+      };
+    });
+  } catch (err) {
+    console.warn('Falha silenciosa ao espelhar no IndexedDB:', err);
+  }
+}
 
 const INDEXED_DB_NAME = 'discovery_done_indexed_db';
 const INDEXED_DB_VERSION = 1;
