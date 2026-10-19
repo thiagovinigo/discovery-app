@@ -151,6 +151,11 @@ export const storageService = {
     return projects[0] || INITIAL_MOCK_PROJECT;
   },
 
+  /** Id guardado como ativo, sem checar se o projeto ainda existe. */
+  getActiveProjectId(): string | null {
+    return localStorage.getItem(STORAGE_KEY_ACTIVE_PROJECT_ID);
+  },
+
   setActiveProjectId(id: string) {
     localStorage.setItem(STORAGE_KEY_ACTIVE_PROJECT_ID, id);
   },
