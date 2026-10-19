@@ -16,6 +16,11 @@ Gerado a partir de três diagnósticos (arquitetura, revisão React, mapa de pro
 | E3.1 Closure da gravação | Feito: fala gravada na hora, análise mesclada depois (`sessionService`). Verificado na simulação da Sala ao Vivo (0 → 6 falas) |
 | E3.2 Storage respeita `projectId` | Feito (`updateProject` imutável) |
 | E3.6 Ids únicos | Feito (`crypto.randomUUID` com fallback) |
+| E3.3 IndexedDB como fallback | Feito: o espelho substitui o conteúdo (exclusões chegam), grava em fila e fecha as conexões; `restoreFromIndexedDb` roda no carregamento; em estouro de cota a leitura usa a cópia em memória. Verificado no app: apagando os projetos do `localStorage` e recarregando, voltam com conteúdo idêntico |
+| E3.4 Atalhos de teclado | Feito: handlers estáveis (`useCallback`) lendo do storage; sem avisos de hooks em `App.tsx`. Verificado no app com Alt+M |
+| E3.5 Gerador de backlog com merge | Feito (`planBacklogMerge`): incremento entra direto, alteração de item existente pede confirmação. Coberto por testes; não verificado no navegador (o `confirm()` trava a automação) |
+
+**Fase 1 concluída.** Próxima: Fase 2 (arquitetura), começando por E5.1 (dividir o `geminiService`) e E4.1 (fonte única de estado).
 | Fix: Sala ao Vivo em branco em projeto sem sessão | Feito (estado vazio com botão "Iniciar primeira sessão") |
 
 O teste `it.fails` de `addBugReport` (em `storageService.test.ts`) documenta o bug de E3.2 e deve virar teste normal quando E3.2 for corrigido.
