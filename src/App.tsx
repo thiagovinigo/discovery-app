@@ -7,6 +7,7 @@ import {
 } from './types/discovery';
 import { storageService } from './services/storageService';
 import { geminiService } from './services/geminiService';
+import { appendSegment, applyLiveAnalysis } from './services/sessionService';
 import { audioService, type AudioStatus } from './services/audioService';
 import { transcribeAudioWithWhisper } from './services/openAiClient';
 
@@ -74,6 +75,11 @@ export const App: React.FC = () => {
   const recordingTimerRef = useRef<any>(null);
   const noticeTimerRef = useRef<any>(null);
   const lastAiErrorRef = useRef<string>('');
+  // O callback de áudio nasce uma vez e enxergaria o valor antigo do estado; o ref sempre tem o atual
+  const isInformalChatRef = useRef(false);
+  useEffect(() => {
+    isInformalChatRef.current = isInformalChatMode;
+  }, [isInformalChatMode]);
 
   const showNotice = (type: 'error' | 'info' | 'success', text: string) => {
     setNotice({ type, text });
@@ -361,47 +367,46 @@ export const App: React.FC = () => {
     setIsRecording(false);
   };
 
-  // Incoming Speech or Simulation Chunk
+  // Reflete no estado do React o projeto que acabou de ser gravado no storage
+  const syncAfterCommit = (updated: DiscoveryProject) => {
+    if (storageService.getActiveProject().id === updated.id) setActiveProject(updated);
+    setProjects(storageService.getAllProjects());
+  };
+
+  // Incoming Speech or Simulation Chunk.
+  // O callback de áudio é criado uma única vez ao iniciar a gravação e guarda cópias antigas do estado
+  // do React, por isso a sessão é lida do storage a cada fala. A fala é gravada antes de esperar a IA, e a
+  // análise é mesclada depois sobre a sessão atual, sem tocar na transcrição.
   const handleIncomingTranscript = async (
     speaker: 'Entrevistador (PM)' | 'Usuário / Stakeholder',
     text: string
   ) => {
-    if (!currentSession) return;
+    const project = storageService.getActiveProject();
+    const session = project.sessions.find(s => s.id === project.activeSessionId) || project.sessions[0];
+    if (!session) return;
 
+    const lowered = text.toLowerCase();
     const newSeg: TranscriptSegment = {
       id: 'seg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
       speaker,
       text,
       timestamp: new Date().toLocaleTimeString('pt-BR', { minute: '2-digit', second: '2-digit' }),
       isFinal: true,
-      highlightType: text.toLowerCase().includes('trava') || text.toLowerCase().includes('caos') || text.toLowerCase().includes('dor')
+      highlightType: lowered.includes('trava') || lowered.includes('caos') || lowered.includes('dor')
         ? 'pain'
-        : text.toLowerCase().includes('queria') || text.toLowerCase().includes('se tivesse')
+        : lowered.includes('queria') || lowered.includes('se tivesse')
         ? 'jtbd'
         : undefined
     };
 
-    const updatedTranscript = [...currentSession.rawTranscript, newSeg];
+    const withSegment = appendSegment(project.id, session.id, newSeg);
+    if (withSegment) syncAfterCommit(withSegment);
 
-    // Se estiver no Modo Bate-Papo Informal, salva a fala sem acionar IA (economiza tokens e preserva foco)
-    if (isInformalChatMode) {
-      const updatedSession: MeetingSession = {
-        ...currentSession,
-        rawTranscript: updatedTranscript
-      };
-      const updatedProj: DiscoveryProject = {
-        ...activeProject,
-        sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
-      };
-      setActiveProject(updatedProj);
-      storageService.saveActiveProject(updatedProj);
-      setProjects(storageService.getAllProjects());
-      return;
-    }
+    // Modo Bate-Papo Informal: salva a fala sem acionar IA (economiza tokens e preserva foco)
+    if (isInformalChatRef.current) return;
 
-    // Trigger AI / Heuristic Analysis
-    const recent = updatedTranscript.slice(-4).map(s => ({ speaker: s.speaker, text: s.text }));
-    const analysis = await geminiService.analyzeLiveConversation(recent, activeProject.description);
+    const recent = [...session.rawTranscript, newSeg].slice(-4).map(s => ({ speaker: s.speaker, text: s.text }));
+    const analysis = await geminiService.analyzeLiveConversation(recent, project.description);
     if (analysis.error) {
       // Evita repetir o mesmo aviso a cada fala
       if (analysis.error !== lastAiErrorRef.current) {
@@ -412,78 +417,8 @@ export const App: React.FC = () => {
       lastAiErrorRef.current = '';
     }
 
-    // Update Mind Map
-    const updatedMindNodes = [...currentSession.mindMapNodes];
-    let root = updatedMindNodes.find(n => n.type === 'root');
-    if (!root) {
-      root = {
-        id: 'm-root',
-        label: currentSession.title || activeProject.name || 'Objetivo do Discovery',
-        type: 'root',
-        x: 400,
-        y: 250,
-        color: '#6366f1'
-      };
-      updatedMindNodes.unshift(root);
-    }
-    const updatedMindEdges = [...currentSession.mindMapEdges];
-
-    analysis.newMindMapNodes.forEach(newNode => {
-      if (!updatedMindNodes.some(n => n.label.toLowerCase() === newNode.label.toLowerCase())) {
-        updatedMindNodes.push(newNode);
-        updatedMindEdges.push({
-          id: 'edge-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-          source: root!.id,
-          target: newNode.id
-        });
-      }
-    });
-
-    // Update User Flow Steps
-    const updatedUserFlow = [...currentSession.userFlowSteps];
-    analysis.newUserFlowSteps.forEach(newStep => {
-      if (!updatedUserFlow.some(s => s.title.toLowerCase() === newStep.title.toLowerCase())) {
-        updatedUserFlow.push({
-          ...newStep,
-          stepNumber: updatedUserFlow.length + 1
-        });
-      }
-    });
-
-    // Deduplicate Questions
-    const existingQTexts = new Set(currentSession.liveQuestions.map(q => q.question.toLowerCase().trim()));
-    const freshQuestions = analysis.newQuestions.filter(q => !existingQTexts.has(q.question.toLowerCase().trim()));
-    const updatedQuestions = [...freshQuestions, ...currentSession.liveQuestions];
-
-    // Deduplicate Pain Points
-    const existingPains = new Set(currentSession.painPoints.map(p => p.description.toLowerCase().trim()));
-    const freshPains = analysis.newPainPoints.filter(p => !existingPains.has(p.description.toLowerCase().trim()));
-    const updatedPainPoints = [...currentSession.painPoints, ...freshPains];
-
-    // Deduplicate JTBDs
-    const existingJobs = new Set(currentSession.jtbds.map(j => j.job.toLowerCase().trim()));
-    const freshJobs = analysis.newJtbds.filter(j => !existingJobs.has(j.job.toLowerCase().trim()));
-    const updatedJtbds = [...currentSession.jtbds, ...freshJobs];
-
-    const updatedSession: MeetingSession = {
-      ...currentSession,
-      rawTranscript: updatedTranscript,
-      liveQuestions: updatedQuestions,
-      painPoints: updatedPainPoints,
-      jtbds: updatedJtbds,
-      mindMapNodes: updatedMindNodes,
-      mindMapEdges: updatedMindEdges,
-      userFlowSteps: updatedUserFlow
-    };
-
-    const updatedProj: DiscoveryProject = {
-      ...activeProject,
-      sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
-    };
-
-    setActiveProject(updatedProj);
-    storageService.saveActiveProject(updatedProj);
-    setProjects(storageService.getAllProjects());
+    const withAnalysis = applyLiveAnalysis(project.id, session.id, analysis);
+    if (withAnalysis) syncAfterCommit(withAnalysis);
   };
 
   // Análise manual ou por lote acionada pelo usuário para toda a conversa
