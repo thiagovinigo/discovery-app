@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { githubCrawlerService, CrawlerLogEntry } from '../services/githubCrawlerService';
 import { runStudioAgent } from '../services/studioAgentService';
+import type { StudioAgentId, StudioAgentResult } from '../services/studioAgentService';
+import { ExampleResultNotice } from './ExampleResultNotice';
 import {
   Bot,
   Play,
@@ -74,6 +76,7 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
   const [jiraPayload, setJiraPayload] = useState<string | null>(null);
   const [isGeneratingJira, setIsGeneratingJira] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [resultSource, setResultSource] = useState<Partial<Record<StudioAgentId, StudioAgentResult['source']>>>({});
 
   const handleCopyText = (key: string, text: string) => {
     navigator.clipboard.writeText(text);
@@ -81,12 +84,21 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const handleRunSpecArchitect = async () => {
-    setIsGeneratingSpec(true);
-    const result = await runStudioAgent('spec_architect', specInput);
-    setGeneratedSpec(result.text);
-    setIsGeneratingSpec(false);
+  // Roda um agente e guarda a origem do resultado, para avisar quando for só um exemplo
+  const runAgent = async (
+    id: StudioAgentId,
+    input: string,
+    setBusy: (busy: boolean) => void,
+    setResult: (text: string) => void
+  ) => {
+    setBusy(true);
+    const result = await runStudioAgent(id, input);
+    setResult(result.text);
+    setResultSource(prev => ({ ...prev, [id]: result.source }));
+    setBusy(false);
   };
+
+  const handleRunSpecArchitect = () => runAgent('spec_architect', specInput, setIsGeneratingSpec, setGeneratedSpec);
 
   const handleRunCrawler = async () => {
     setIsCrawling(true);
@@ -110,33 +122,13 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
     }
   };
 
-  const handleRunCoach = async () => {
-    setIsPrescribing(true);
-    const result = await runStudioAgent('coach', teamProblem);
-    setCoachPrescription(result.text);
-    setIsPrescribing(false);
-  };
+  const handleRunCoach = () => runAgent('coach', teamProblem, setIsPrescribing, setCoachPrescription);
 
-  const handleRunSlicer = async () => {
-    setIsSlicing(true);
-    const result = await runStudioAgent('slicer', epicToSlice);
-    setSlicedStories(result.text);
-    setIsSlicing(false);
-  };
+  const handleRunSlicer = () => runAgent('slicer', epicToSlice, setIsSlicing, setSlicedStories);
 
-  const handleRunSynthesizer = async () => {
-    setIsSynthesizing(true);
-    const result = await runStudioAgent('synthesizer', rawNotes);
-    setSynthesizedDiscovery(result.text);
-    setIsSynthesizing(false);
-  };
+  const handleRunSynthesizer = () => runAgent('synthesizer', rawNotes, setIsSynthesizing, setSynthesizedDiscovery);
 
-  const handleRunJiraSync = async () => {
-    setIsGeneratingJira(true);
-    const result = await runStudioAgent('jira_sync', jiraProjectKey);
-    setJiraPayload(result.text);
-    setIsGeneratingJira(false);
-  };
+  const handleRunJiraSync = () => runAgent('jira_sync', jiraProjectKey, setIsGeneratingJira, setJiraPayload);
 
   return (
     <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '600px' }}>
@@ -511,6 +503,7 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
                   </button>
                 )}
               </div>
+              {coachPrescription && resultSource.coach === 'template' && <ExampleResultNotice />}
               {coachPrescription ? (
                 <div style={{ fontSize: '0.82rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
                   {coachPrescription}
@@ -574,6 +567,7 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
                   </button>
                 )}
               </div>
+              {slicedStories && resultSource.slicer === 'template' && <ExampleResultNotice />}
               {slicedStories ? (
                 <div style={{ fontSize: '0.82rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
                   {slicedStories}
@@ -637,6 +631,7 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
                   </button>
                 )}
               </div>
+              {synthesizedDiscovery && resultSource.synthesizer === 'template' && <ExampleResultNotice />}
               {synthesizedDiscovery ? (
                 <div style={{ fontSize: '0.82rem', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
                   {synthesizedDiscovery}
@@ -710,6 +705,7 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
                   </button>
                 )}
               </div>
+              {jiraPayload && resultSource.jira_sync === 'template' && <ExampleResultNotice />}
               {jiraPayload ? (
                 <pre style={{
                   fontSize: '0.75rem',
@@ -788,6 +784,7 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
                   </button>
                 )}
               </div>
+              {generatedSpec && resultSource.spec_architect === 'template' && <ExampleResultNotice />}
               {generatedSpec ? (
                 <pre style={{
                   fontSize: '0.75rem',

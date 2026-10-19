@@ -52,13 +52,28 @@ describe('geminiService.analyzeLiveConversation: sem chave (heurística offline)
     expect(result.newPainPoints[0].quote!.startsWith('PM')).toBe(false);
   });
 
-  // Comportamento atual, registrado no BACKLOG.md: o rótulo "Usuário" do falante entra no texto analisado e
-  // dispara a regra de cliente, então toda fala de "Usuário / Stakeholder" gera esses itens, qualquer que seja o conteúdo.
-  it('o rótulo "Usuário" do falante dispara a regra de cliente mesmo sem o assunto na fala', async () => {
+  it('o rótulo do falante não conta como assunto: "Usuário" não dispara a regra de cliente (E5.4)', async () => {
     const result = await geminiService.analyzeLiveConversation(say('Ontem fomos almoçar juntos', 'Usuário / Stakeholder'), 'Contexto');
+
+    expect(result.newMindMapNodes.map(n => n.label)).not.toContain('Atrito com o Cliente');
+    expect(result.newQuestions.map(q => q.category)).not.toContain('risk_validation');
+    expect(result.newJtbds).toEqual([]);
+  });
+
+  it('quando a fala realmente fala de cliente, a regra de cliente dispara', async () => {
+    const result = await geminiService.analyzeLiveConversation(say('O cliente ameaçou cancelar o contrato', 'Usuário / Stakeholder'), 'Contexto');
 
     expect(result.newMindMapNodes.map(n => n.label)).toContain('Atrito com o Cliente');
     expect(result.newQuestions.map(q => q.category)).toContain('risk_validation');
+  });
+
+  it('analisa todas as falas recentes, não só a última', async () => {
+    const result = await geminiService.analyzeLiveConversation(
+      [{ speaker: 'PM', text: 'Como é o processo hoje?' }, { speaker: 'Entrevistado', text: 'Tudo em planilha' }],
+      'Contexto'
+    );
+
+    expect(result.newMindMapNodes.map(n => n.label)).toContain('Dependência de Planilhas');
   });
 
   it('fala sem palavras-chave vira um tópico genérico mais uma pergunta de 5 Porquês', async () => {

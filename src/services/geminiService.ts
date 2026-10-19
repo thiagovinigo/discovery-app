@@ -44,8 +44,11 @@ export const geminiService = {
       .map(t => `${t.speaker}: "${t.text}"`)
       .join('\n');
 
+    // A heurística olha só o que foi dito: com o rótulo do falante, "Usuário" disparava a regra de cliente
+    const spokenText = recentTranscripts.map(t => t.text).join('\n');
+
     if (!apiKey) {
-      return { ...heuristicAnalysis(conversationText), source: 'offline' };
+      return { ...heuristicAnalysis(spokenText), source: 'offline' };
     }
 
     try {
@@ -74,7 +77,7 @@ export const geminiService = {
     } catch (e: unknown) {
       console.warn('Erro ao processar com IA, acionando heurística offline:', e);
       return {
-        ...heuristicAnalysis(conversationText),
+        ...heuristicAnalysis(spokenText),
         source: 'offline',
         error: errorMessage(e, 'Erro inesperado ao processar com a IA.')
       };

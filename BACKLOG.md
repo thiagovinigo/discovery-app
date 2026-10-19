@@ -21,6 +21,8 @@ Gerado a partir de três diagnósticos (arquitetura, revisão React, mapa de pro
 | E3.5 Gerador de backlog com merge | Feito (`planBacklogMerge`): incremento entra direto, alteração de item existente pede confirmação. Coberto por testes; não verificado no navegador (o `confirm()` trava a automação) |
 | E5.1 Dividir o `geminiService` | Feito: 663 → 127 linhas. Novos: `ai/types.ts`, `ai/normalizers.ts`, `ai/prompts.ts`, `ai/heuristics.ts` (todos abaixo de 400). A fachada manteve a API pública. 21 testes de caracterização escritos antes e passando depois; texto dos prompts verificado idêntico ao original |
 | E5.2 `AgentStudioView` sem `callAI` | Feito: novo `studioAgentService` (`runStudioAgent`, 5 agentes) e `studioTemplates`; os 5 handlers do componente viraram 4 linhas cada. Zero imports de `callAI` em `components/`. 15 testes novos; verificado no app com o Story Slicer |
+| E5.4 Heurística sem o rótulo do falante | Feito: a heurística offline analisa só o texto das falas. O teste que documentava o defeito foi invertido e há testes de que a regra de cliente ainda dispara quando a fala é sobre cliente e de que todas as falas recentes são analisadas |
+| E5.5 Aviso de texto de exemplo nos agentes | Feito: `ExampleResultNotice` aparece sobre o resultado quando `source === 'template'`. 3 testes de tela (Testing Library); verificado no app com o Story Slicer sem chave |
 
 **Fase 1 concluída.** Próxima: Fase 2 (arquitetura), começando por E5.1 (dividir o `geminiService`) e E4.1 (fonte única de estado).
 | Fix: Sala ao Vivo em branco em projeto sem sessão | Feito (estado vazio com botão "Iniciar primeira sessão") |
