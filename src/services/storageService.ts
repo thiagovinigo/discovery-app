@@ -9,6 +9,14 @@ const STORAGE_KEY_OPENAI_MODEL = 'discovery_done_openai_model_v1';
 const STORAGE_KEY_GEMINI_KEY = 'discovery_done_gemini_api_key_v1';
 const STORAGE_KEY_GEMINI_MODEL = 'discovery_done_gemini_model_v1';
 
+/** Id único com prefixo legível. `Date.now()` sozinho repete quando dois itens nascem no mesmo milissegundo. */
+function newId(prefix: string): string {
+  const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `${prefix}-${unique}`;
+}
+
 export const storageService = {
   getAiProvider(): 'openai' | 'gemini' {
     const p = localStorage.getItem(STORAGE_KEY_AI_PROVIDER);
@@ -165,7 +173,7 @@ export const storageService = {
     }
     const imported: DiscoveryProject = {
       ...data,
-      id: 'proj-' + Date.now(),
+      id: newId('proj'),
       name: data.name + ' (importado)',
       okrs: Array.isArray(data.okrs) ? data.okrs : [],
       epics: Array.isArray(data.epics) ? data.epics : [],
@@ -181,7 +189,7 @@ export const storageService = {
 
   createNewProject(name: string, description: string): DiscoveryProject {
     const newProj: DiscoveryProject = {
-      id: 'proj-' + Date.now(),
+      id: newId('proj'),
       name: name || 'Novo Projeto de Discovery',
       description: description || 'Descoberta de necessidades e oportunidades de produto.',
       createdAt: new Date().toISOString(),
@@ -190,7 +198,7 @@ export const storageService = {
       okrs: [],
       epics: [],
       prd: {
-        id: 'prd-' + Date.now(),
+        id: newId('prd'),
         title: `PRD: ${name}`,
         version: '0.1.0 (Rascunho Inicial)',
         lastUpdated: new Date().toLocaleDateString('pt-BR'),
@@ -244,7 +252,7 @@ export const storageService = {
     const projectName = initialName || 'Meu Projeto Oficial de Discovery';
     const projectDesc = initialDesc || 'Ambiente limpo pronto para conduzir entrevistas reais, capturar áudio com Whisper e gerar PRD.';
     const cleanProject: DiscoveryProject = {
-      id: 'proj-' + Date.now(),
+      id: newId('proj'),
       name: projectName,
       description: projectDesc,
       createdAt: new Date().toISOString(),
@@ -283,7 +291,7 @@ export const storageService = {
       okrs: [],
       epics: [],
       prd: {
-        id: 'prd-' + Date.now(),
+        id: newId('prd'),
         title: `PRD: ${projectName}`,
         version: '0.1.0 (Rascunho Inicial)',
         lastUpdated: new Date().toLocaleDateString('pt-BR'),
@@ -321,15 +329,26 @@ export const storageService = {
     return cleanProject;
   },
 
+  /**
+   * Aplica `update` ao projeto com esse id sem mutar o original e persiste o resultado.
+   * Devolve o projeto atualizado, ou `undefined` se o id não existir.
+   */
+  updateProject(projectId: string, update: (project: DiscoveryProject) => DiscoveryProject): DiscoveryProject | undefined {
+    const projects = this.getAllProjects();
+    const current = projects.find(p => p.id === projectId);
+    if (!current) return undefined;
+    const updated: DiscoveryProject = { ...update(current), updatedAt: new Date().toISOString() };
+    this.saveAllProjects(projects.map(p => (p.id === projectId ? updated : p)));
+    return updated;
+  },
+
   addBugReport(projectId: string, bug: Omit<import('../types/discovery').BugReportItem, 'id'>): import('../types/discovery').BugReportItem {
-    const project = this.getActiveProject();
     const newBug: import('../types/discovery').BugReportItem = {
       ...bug,
-      id: 'bug-' + Date.now()
+      id: newId('bug')
     };
-    if (!project.bugReports) project.bugReports = [];
-    project.bugReports.unshift(newBug);
-    this.saveActiveProject(project);
+    const updated = this.updateProject(projectId, p => ({ ...p, bugReports: [newBug, ...(p.bugReports ?? [])] }));
+    if (!updated) throw new Error(`Projeto não encontrado: ${projectId}`);
     return newBug;
   },
 
@@ -341,22 +360,25 @@ export const storageService = {
     dor: import('../types/discovery').ChecklistItem[],
     dod: import('../types/discovery').ChecklistItem[]
   ) {
-    const project = this.getActiveProject();
-    const epic = project.epics.find(e => e.id === epicId);
-    if (!epic) return;
-    const feat = epic.features.find(f => f.id === featId);
-    if (!feat) return;
-    const story = feat.userStories.find(s => s.id === storyId);
-    if (!story) return;
-    story.dorChecklist = dor;
-    story.dodChecklist = dod;
-    this.saveActiveProject(project);
+    this.updateProject(projectId, p => ({
+      ...p,
+      epics: p.epics.map(epic => epic.id !== epicId ? epic : {
+        ...epic,
+        features: epic.features.map(feat => feat.id !== featId ? feat : {
+          ...feat,
+          userStories: feat.userStories.map(story =>
+            story.id !== storyId ? story : { ...story, dorChecklist: dor, dodChecklist: dod }
+          )
+        })
+      })
+    }));
   },
 
   createNewSession(projectId: string, title?: string, participants?: string[]): MeetingSession {
-    const project = this.getActiveProject();
+    const project = this.getAllProjects().find(p => p.id === projectId);
+    if (!project) throw new Error(`Projeto não encontrado: ${projectId}`);
     const newSession: MeetingSession = {
-      id: 'sess-' + Date.now(),
+      id: newId('sess'),
       title: title || `Sessão de Discovery #${(project.sessions.length + 1)}`,
       date: new Date().toLocaleDateString('pt-BR'),
       durationSeconds: 0,
@@ -378,9 +400,7 @@ export const storageService = {
       userFlowSteps: []
     };
 
-    project.sessions.unshift(newSession);
-    project.activeSessionId = newSession.id;
-    this.saveActiveProject(project);
+    this.updateProject(projectId, p => ({ ...p, sessions: [newSession, ...p.sessions], activeSessionId: newSession.id }));
     return newSession;
   },
 

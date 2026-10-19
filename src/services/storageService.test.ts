@@ -150,16 +150,9 @@ describe('storageService: operações sobre o projeto ativo', () => {
     expect(storageService.getActiveProject().bugReports?.[0].id).toBe(bug.id);
   });
 
-  // Bug conhecido (E3.2 do BACKLOG.md): as funções ignoram o projectId recebido e
-  // sempre alteram o projeto ativo. Quando E3.2 for corrigido, este teste passa a
-  // falhar como "it.fails": remova o .fails.
-  it.fails('addBugReport respeita o projectId recebido, não o projeto ativo', () => {
-    // Os ids são 'proj-' + Date.now(): sem avançar o relógio, A e B nasceriam com o mesmo id.
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(1_000);
+  it('addBugReport respeita o projectId recebido, não o projeto ativo (E3.2)', () => {
     const a = storageService.createNewProject('A', '');
-    vi.setSystemTime(2_000);
-    storageService.createNewProject('B', ''); // B fica ativo
+    const b = storageService.createNewProject('B', ''); // B fica ativo
 
     storageService.addBugReport(a.id, {
       title: 'Bug do A',
@@ -170,7 +163,57 @@ describe('storageService: operações sobre o projeto ativo', () => {
     } as never);
 
     const projectA = storageService.getAllProjects().find(p => p.id === a.id)!;
+    const projectB = storageService.getAllProjects().find(p => p.id === b.id)!;
     expect(projectA.bugReports).toHaveLength(1);
+    expect(projectB.bugReports).toHaveLength(0);
+  });
+
+  it('createNewSession respeita o projectId e não ativa outro projeto (E3.2)', () => {
+    const a = storageService.createNewProject('A', '');
+    const b = storageService.createNewProject('B', '');
+
+    const session = storageService.createNewSession(a.id, 'Sessão do A');
+
+    const all = storageService.getAllProjects();
+    expect(all.find(p => p.id === a.id)!.sessions[0].id).toBe(session.id);
+    expect(all.find(p => p.id === b.id)!.sessions).toHaveLength(0);
+    expect(storageService.getActiveProject().id).toBe(b.id);
+  });
+
+  it('updateStoryChecklists respeita o projectId (E3.2)', () => {
+    const epic = INITIAL_MOCK_PROJECT.epics[0];
+    const feature = epic.features[0];
+    const story = feature.userStories[0];
+    storageService.getAllProjects();
+    const other = storageService.createNewProject('Outro', ''); // fica ativo
+
+    storageService.updateStoryChecklists(INITIAL_MOCK_PROJECT.id, epic.id, feature.id, story.id, [], []);
+
+    const mock = storageService.getAllProjects().find(p => p.id === INITIAL_MOCK_PROJECT.id)!;
+    expect(mock.epics[0].features[0].userStories[0].dorChecklist).toEqual([]);
+    expect(storageService.getAllProjects().find(p => p.id === other.id)!.epics).toEqual([]);
+  });
+
+  it('não altera o objeto devolvido por getAllProjects ao registrar um bug (sem mutação)', () => {
+    const project = storageService.createNewProject('P', '');
+    const before = storageService.getAllProjects().find(p => p.id === project.id)!;
+
+    storageService.addBugReport(project.id, { title: 'x', severity: 'high', status: 'open' } as never);
+
+    expect(before.bugReports ?? []).toHaveLength(0);
+  });
+
+  it('gera ids diferentes mesmo quando criados no mesmo milissegundo (E3.6)', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(1_000);
+
+    const a = storageService.createNewProject('A', '');
+    const b = storageService.createNewProject('B', '');
+    const s1 = storageService.createNewSession(a.id);
+    const s2 = storageService.createNewSession(a.id);
+
+    expect(a.id).not.toBe(b.id);
+    expect(s1.id).not.toBe(s2.id);
   });
 
   it('updateStoryChecklists grava DoR e DoD na história indicada', () => {
