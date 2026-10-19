@@ -75,13 +75,22 @@ function mergeAnalysis(session: MeetingSession, projectName: string, analysis: A
   };
 }
 
+/** Acrescenta várias falas, em ordem, ao fim da transcrição da sessão e persiste. */
+export function appendSegments(
+  projectId: string,
+  sessionId: string,
+  segments: TranscriptSegment[]
+): DiscoveryProject | undefined {
+  return updateSession(projectId, sessionId, s => ({ ...s, rawTranscript: [...s.rawTranscript, ...segments] }));
+}
+
 /** Acrescenta uma fala ao fim da transcrição da sessão e persiste. */
 export function appendSegment(
   projectId: string,
   sessionId: string,
   segment: TranscriptSegment
 ): DiscoveryProject | undefined {
-  return updateSession(projectId, sessionId, s => ({ ...s, rawTranscript: [...s.rawTranscript, segment] }));
+  return appendSegments(projectId, sessionId, [segment]);
 }
 
 /** Marca uma pergunta do prompter como já feita. */

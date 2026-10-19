@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { storageService } from './storageService';
-import { applyLiveAnalysis, appendSegment, markQuestionAsked } from './sessionService';
+import { applyLiveAnalysis, appendSegment, appendSegments, markQuestionAsked } from './sessionService';
 import type { AnalysisResponse } from './geminiService';
 import type { TranscriptSegment } from '../types/discovery';
 
@@ -72,6 +72,29 @@ describe('appendSegment', () => {
 
     const otherSaved = storageService.getAllProjects().find(p => p.id === projectId)!.sessions.find(s => s.id === other.id)!;
     expect(otherSaved.rawTranscript).toEqual([]);
+  });
+});
+
+describe('appendSegments', () => {
+  it('acrescenta várias falas de uma vez, em ordem, depois das que já existem', () => {
+    appendSegment(projectId, sessionId, segment(0));
+
+    appendSegments(projectId, sessionId, [segment(1), segment(2), segment(3)]);
+
+    expect(currentSession().rawTranscript.map(s => s.id)).toEqual(['seg-0', 'seg-1', 'seg-2', 'seg-3']);
+  });
+
+  it('uma lista vazia não altera a transcrição', () => {
+    appendSegment(projectId, sessionId, segment(1));
+
+    appendSegments(projectId, sessionId, []);
+
+    expect(currentSession().rawTranscript).toHaveLength(1);
+  });
+
+  it('devolve undefined quando o projeto ou a sessão não existem', () => {
+    expect(appendSegments('nao-existe', sessionId, [segment(1)])).toBeUndefined();
+    expect(appendSegments(projectId, 'nao-existe', [segment(1)])).toBeUndefined();
   });
 });
 

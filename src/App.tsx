@@ -8,7 +8,7 @@ import {
 } from './types/discovery';
 import { storageService } from './services/storageService';
 import { geminiService } from './services/geminiService';
-import { appendSegment, applyLiveAnalysis, markQuestionAsked } from './services/sessionService';
+import { appendSegment, appendSegments, applyLiveAnalysis, markQuestionAsked } from './services/sessionService';
 import { planBacklogMerge } from './services/backlogMerge';
 import { useProjects } from './state/useProjects';
 import { audioService, type AudioStatus } from './services/audioService';
@@ -421,80 +421,16 @@ export const App: React.FC = () => {
         showNotice('info', `Análise local offline realizada (${analysis.error})`);
       }
 
-      // Merge Mind Map Nodes
-      const updatedMindNodes = [...currentSession.mindMapNodes];
-      let root = updatedMindNodes.find(n => n.type === 'root');
-      if (!root) {
-        root = {
-          id: 'm-root',
-          label: currentSession.title || activeProject.name || 'Objetivo do Discovery',
-          type: 'root',
-          x: 400,
-          y: 250,
-          color: '#6366f1'
-        };
-        updatedMindNodes.unshift(root);
-      }
+      // O merge lê a sessão mais recente do storage: falas gravadas enquanto a IA respondia não se perdem
+      const updated = applyLiveAnalysis(activeProject.id, currentSession.id, analysis);
+      refresh();
 
-      const updatedMindEdges = [...currentSession.mindMapEdges];
-      let addedNodesCount = 0;
+      const after = updated?.sessions.find(s => s.id === currentSession.id);
+      const hadRoot = currentSession.mindMapNodes.some(n => n.type === 'root');
+      const addedQuestions = Math.max(0, (after?.liveQuestions.length ?? 0) - currentSession.liveQuestions.length);
+      const addedNodes = Math.max(0, (after?.mindMapNodes.length ?? 0) - currentSession.mindMapNodes.length - (hadRoot ? 0 : 1));
 
-      analysis.newMindMapNodes.forEach(newNode => {
-        if (!updatedMindNodes.some(n => n.label.toLowerCase() === newNode.label.toLowerCase())) {
-          updatedMindNodes.push(newNode);
-          updatedMindEdges.push({
-            id: 'edge-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-            source: root!.id,
-            target: newNode.id
-          });
-          addedNodesCount++;
-        }
-      });
-
-      // Deduplicate Questions
-      const existingQTexts = new Set(currentSession.liveQuestions.map(q => q.question.toLowerCase().trim()));
-      const filteredNewQuestions = analysis.newQuestions.filter(q => !existingQTexts.has(q.question.toLowerCase().trim()));
-      const updatedQuestions = [...filteredNewQuestions, ...currentSession.liveQuestions];
-
-      // Deduplicate Pain Points
-      const existingPains = new Set(currentSession.painPoints.map(p => p.description.toLowerCase().trim()));
-      const filteredNewPains = analysis.newPainPoints.filter(p => !existingPains.has(p.description.toLowerCase().trim()));
-      const updatedPainPoints = [...currentSession.painPoints, ...filteredNewPains];
-
-      // Deduplicate JTBDs
-      const existingJobs = new Set(currentSession.jtbds.map(j => j.job.toLowerCase().trim()));
-      const filteredNewJobs = analysis.newJtbds.filter(j => !existingJobs.has(j.job.toLowerCase().trim()));
-      const updatedJtbds = [...currentSession.jtbds, ...filteredNewJobs];
-
-      // Merge User Flow Steps
-      const updatedUserFlow = [...currentSession.userFlowSteps];
-      analysis.newUserFlowSteps.forEach(newStep => {
-        if (!updatedUserFlow.some(s => s.title.toLowerCase() === newStep.title.toLowerCase())) {
-          updatedUserFlow.push({
-            ...newStep,
-            stepNumber: updatedUserFlow.length + 1
-          });
-        }
-      });
-
-      const updatedSession: MeetingSession = {
-        ...currentSession,
-        liveQuestions: updatedQuestions,
-        painPoints: updatedPainPoints,
-        jtbds: updatedJtbds,
-        mindMapNodes: updatedMindNodes,
-        mindMapEdges: updatedMindEdges,
-        userFlowSteps: updatedUserFlow
-      };
-
-      const updatedProj: DiscoveryProject = {
-        ...activeProject,
-        sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
-      };
-
-      saveProject(updatedProj);
-
-      showNotice('success', `Análise concluída com sucesso! +${filteredNewQuestions.length} perguntas contextuais e +${addedNodesCount} nós no mapa mental.`);
+      showNotice('success', `Análise concluída com sucesso! +${addedQuestions} perguntas contextuais e +${addedNodes} nós no mapa mental.`);
     } catch (err: any) {
       console.error('Erro na análise da sessão:', err);
       showNotice('error', `Falha ao processar análise: ${err?.message || err}`);
@@ -507,87 +443,28 @@ export const App: React.FC = () => {
     if (!currentSession || !activeProject) return;
     const converted: TranscriptSegment[] = segments.map((s, idx) => ({
       id: 'import-' + Date.now() + '-' + idx,
-      speaker: s.speaker as any,
+      speaker: s.speaker as TranscriptSegment['speaker'],
       text: s.text,
       timestamp: s.timestamp,
       isFinal: true
     }));
 
-    const updatedTranscript = [...currentSession.rawTranscript, ...converted];
-
-    let updatedSession: MeetingSession = {
-      ...currentSession,
-      rawTranscript: updatedTranscript
-    };
-
-    let updatedProj: DiscoveryProject = {
-      ...activeProject,
-      sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
-    };
-
-    saveProject(updatedProj);
+    appendSegments(activeProject.id, currentSession.id, converted);
+    refresh();
 
     showNotice('info', `${converted.length} falas importadas. Sintetizando mapa mental e perguntas...`);
 
     try {
       setIsAnalyzingLive(true);
-      const speechSlice = updatedTranscript.slice(-12).map(s => ({ speaker: s.speaker, text: s.text }));
+      const speechSlice = [...currentSession.rawTranscript, ...converted].slice(-12).map(s => ({ speaker: s.speaker, text: s.text }));
       const analysis = await geminiService.analyzeLiveConversation(speechSlice, activeProject.description);
 
-      const updatedMindNodes = [...updatedSession.mindMapNodes];
-      let root = updatedMindNodes.find(n => n.type === 'root');
-      if (!root) {
-        root = {
-          id: 'm-root',
-          label: updatedSession.title || activeProject.name,
-          type: 'root',
-          x: 400,
-          y: 250,
-          color: '#6366f1'
-        };
-        updatedMindNodes.unshift(root);
-      }
+      const updated = applyLiveAnalysis(activeProject.id, currentSession.id, analysis);
+      refresh();
 
-      const updatedMindEdges = [...updatedSession.mindMapEdges];
-      analysis.newMindMapNodes.forEach(newNode => {
-        if (!updatedMindNodes.some(n => n.label.toLowerCase() === newNode.label.toLowerCase())) {
-          updatedMindNodes.push(newNode);
-          updatedMindEdges.push({
-            id: 'edge-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-            source: root!.id,
-            target: newNode.id
-          });
-        }
-      });
-
-      const existingQTexts = new Set(updatedSession.liveQuestions.map(q => q.question.toLowerCase().trim()));
-      const filteredNewQuestions = analysis.newQuestions.filter(q => !existingQTexts.has(q.question.toLowerCase().trim()));
-      const updatedQuestions = [...filteredNewQuestions, ...updatedSession.liveQuestions];
-
-      const existingPains = new Set(updatedSession.painPoints.map(p => p.description.toLowerCase().trim()));
-      const filteredNewPains = analysis.newPainPoints.filter(p => !existingPains.has(p.description.toLowerCase().trim()));
-      const updatedPainPoints = [...updatedSession.painPoints, ...filteredNewPains];
-
-      const existingJobs = new Set(updatedSession.jtbds.map(j => j.job.toLowerCase().trim()));
-      const filteredNewJobs = analysis.newJtbds.filter(j => !existingJobs.has(j.job.toLowerCase().trim()));
-      const updatedJtbds = [...updatedSession.jtbds, ...filteredNewJobs];
-
-      updatedSession = {
-        ...updatedSession,
-        liveQuestions: updatedQuestions,
-        painPoints: updatedPainPoints,
-        jtbds: updatedJtbds,
-        mindMapNodes: updatedMindNodes,
-        mindMapEdges: updatedMindEdges
-      };
-
-      updatedProj = {
-        ...activeProject,
-        sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
-      };
-
-      saveProject(updatedProj);
-      showNotice('success', `Importação concluída! +${filteredNewQuestions.length} perguntas e +${analysis.newMindMapNodes.length} tópicos gerados no mapa.`);
+      const after = updated?.sessions.find(s => s.id === currentSession.id);
+      const addedQuestions = Math.max(0, (after?.liveQuestions.length ?? 0) - currentSession.liveQuestions.length);
+      showNotice('success', `Importação concluída! +${addedQuestions} perguntas e +${analysis.newMindMapNodes.length} tópicos gerados no mapa.`);
     } catch (e: any) {
       console.error('Erro ao analisar falas importadas:', e);
     } finally {
