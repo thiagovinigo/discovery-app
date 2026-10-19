@@ -8,6 +8,7 @@ import {
 import { storageService } from './services/storageService';
 import { geminiService } from './services/geminiService';
 import { appendSegment, applyLiveAnalysis } from './services/sessionService';
+import { planBacklogMerge } from './services/backlogMerge';
 import { audioService, type AudioStatus } from './services/audioService';
 import { transcribeAudioWithWhisper } from './services/openAiClient';
 
@@ -783,16 +784,27 @@ export const App: React.FC = () => {
         showNotice('success', 'Backlog e PRD gerados com a IA.');
       }
 
-      const updatedProj: DiscoveryProject = {
-        ...activeProject,
-        okrs: result.okrs.length > 0 ? result.okrs : activeProject.okrs,
-        epics: result.epics.length > 0 ? result.epics : activeProject.epics,
-        prd: result.prd ? { ...result.prd, id: activeProject.prd.id } : activeProject.prd
-      };
+      // Merge sobre o estado mais recente do storage: itens novos entram direto; itens existentes só
+      // mudam se o usuário confirmar, e o que ele editou durante a geração não é pisado.
+      const latest = storageService.getAllProjects().find(p => p.id === activeProject.id) ?? activeProject;
+      const plan = planBacklogMerge({ okrs: latest.okrs, epics: latest.epics, prd: latest.prd }, result);
+      let chosen = plan.merged;
+      if (plan.changed.length > 0) {
+        const shown = plan.changed.slice(0, 6).map(label => `• ${label}`).join('\n');
+        const rest = plan.changed.length > 6 ? `\n… e mais ${plan.changed.length - 6}` : '';
+        const useAiVersion = window.confirm(
+          `A IA propõe alterar ${plan.changed.length} item(ns) que você já tem:\n\n${shown}${rest}\n\n` +
+          'OK = usar a versão da IA nesses itens.\nCancelar = manter os seus (os itens novos entram de qualquer forma).'
+        );
+        if (useAiVersion) chosen = plan.replaced;
+      }
 
-      setActiveProject(updatedProj);
-      storageService.saveActiveProject(updatedProj);
-      setProjects(storageService.getAllProjects());
+      const updated = storageService.updateProject(activeProject.id, p => ({ ...p, ...chosen }));
+      if (updated) syncAfterCommit(updated);
+
+      const { added } = plan;
+      const kept = plan.changed.length > 0 && chosen === plan.merged ? ` ${plan.changed.length} item(ns) seu(s) mantido(s).` : '';
+      showNotice('success', `Backlog atualizado: +${added.epics} épico(s), +${added.features} feature(s), +${added.stories} história(s), +${added.okrs} OKR(s).${kept}`);
       setActiveView('backlog');
     } catch (e: any) {
       console.error(e);
