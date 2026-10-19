@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
+  ChecklistItem,
   DiscoveryProject,
   MeetingSession,
   TranscriptSegment,
@@ -9,6 +10,7 @@ import { storageService } from './services/storageService';
 import { geminiService } from './services/geminiService';
 import { appendSegment, applyLiveAnalysis, markQuestionAsked } from './services/sessionService';
 import { planBacklogMerge } from './services/backlogMerge';
+import { useProjects } from './state/useProjects';
 import { audioService, type AudioStatus } from './services/audioService';
 import { transcribeAudioWithWhisper } from './services/openAiClient';
 
@@ -54,8 +56,6 @@ import {
 } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const [projects, setProjects] = useState<DiscoveryProject[]>([]);
-  const [activeProject, setActiveProject] = useState<DiscoveryProject | null>(null);
   const [activeView, setActiveView] = useState<AppView>('projects');
   const [activeRightTab, setActiveRightTab] = useState<'mindmap' | 'userflow'>('mindmap');
 
@@ -88,21 +88,10 @@ export const App: React.FC = () => {
     noticeTimerRef.current = setTimeout(() => setNotice(null), 8000);
   }, []);
 
-  // Initialize projects from storage. Antes de ler, recupera do IndexedDB o que o localStorage perdeu.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const restored = await storageService.restoreFromIndexedDb();
-      // Avisa mesmo se esta execução foi cancelada: no StrictMode a seguinte já encontraria tudo restaurado
-      if (restored) showNotice('info', 'Seus projetos foram recuperados da cópia de segurança do navegador.');
-      if (cancelled) return;
-      setProjects(storageService.getAllProjects());
-      setActiveProject(storageService.getActiveProject());
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [showNotice]);
+  // Fonte única do estado de projetos: a lista, e o projeto ativo derivado dela
+  const { projects, activeProject, refresh, select, create, importFromJson, remove, reset, saveProject, update } = useProjects({
+    onRestored: () => showNotice('info', 'Seus projetos foram recuperados da cópia de segurança do navegador.')
+  });
 
   // Scroll to top automatically whenever activeView changes
   useEffect(() => {
@@ -123,12 +112,6 @@ export const App: React.FC = () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     };
   }, [isRecording]);
-
-  // Reflete no estado do React o projeto que acabou de ser gravado no storage
-  const syncAfterCommit = useCallback((updated: DiscoveryProject) => {
-    if (storageService.getActiveProject().id === updated.id) setActiveProject(updated);
-    setProjects(storageService.getAllProjects());
-  }, []);
 
   // Incoming Speech or Simulation Chunk.
   // O callback de áudio é criado uma única vez ao iniciar a gravação e guarda cópias antigas do estado
@@ -157,7 +140,7 @@ export const App: React.FC = () => {
     };
 
     const withSegment = appendSegment(project.id, session.id, newSeg);
-    if (withSegment) syncAfterCommit(withSegment);
+    if (withSegment) refresh();
 
     // Modo Bate-Papo Informal: salva a fala sem acionar IA (economiza tokens e preserva foco)
     if (isInformalChatRef.current) return;
@@ -175,8 +158,8 @@ export const App: React.FC = () => {
     }
 
     const withAnalysis = applyLiveAnalysis(project.id, session.id, analysis);
-    if (withAnalysis) syncAfterCommit(withAnalysis);
-  }, [showNotice, syncAfterCommit]);
+    if (withAnalysis) refresh();
+  }, [showNotice, refresh]);
 
   // Audio Capture Controls
   const handleStartRecording = useCallback(async (source: 'mic' | 'tab') => {
@@ -225,8 +208,8 @@ export const App: React.FC = () => {
     const session = project.sessions.find(s => s.id === project.activeSessionId) || project.sessions[0];
     if (!session) return;
     const updated = markQuestionAsked(project.id, session.id, questionId);
-    if (updated) syncAfterCommit(updated);
-  }, [syncAfterCommit]);
+    if (updated) refresh();
+  }, [refresh]);
 
   // Global Keyboard Shortcuts (Atalhos Globais recomendados pelo Especialista de UX)
   useEffect(() => {
@@ -293,9 +276,7 @@ export const App: React.FC = () => {
       timestamp: seg.timestamp,
       status: 'open'
     });
-    const updated = storageService.getActiveProject();
-    setActiveProject({ ...updated });
-    setProjects(storageService.getAllProjects());
+    refresh();
     showNotice('success', 'Bug de Produção registrado no catálogo técnico com evidência!');
   };
 
@@ -315,24 +296,22 @@ export const App: React.FC = () => {
     const story = feat.userStories.find(s => s.id === storyId);
     if (!story) return;
 
+    const toggle = (items: ChecklistItem[]) => items.map(i => (i.id === itemId ? { ...i, checked: !i.checked } : i));
     const dor = story.dorChecklist || [];
     const dod = story.dodChecklist || [];
 
-    if (type === 'dor') {
-      story.dorChecklist = dor.map(i => i.id === itemId ? { ...i, checked: !i.checked } : i);
-    } else {
-      story.dodChecklist = dod.map(i => i.id === itemId ? { ...i, checked: !i.checked } : i);
-    }
-
-    storageService.saveActiveProject(activeProject);
-    setActiveProject({ ...activeProject });
+    // Imutável: o objeto da história pertence ao estado do React e não pode ser alterado no lugar
+    storageService.updateStoryChecklists(
+      activeProject.id, epicId, featId, storyId,
+      type === 'dor' ? toggle(dor) : dor,
+      type === 'dod' ? toggle(dod) : dod
+    );
+    refresh();
   };
 
   // Handlers for Projects
   const handleSelectProject = (projectId: string) => {
-    storageService.setActiveProjectId(projectId);
-    const selected = storageService.getActiveProject();
-    setActiveProject(selected);
+    select(projectId);
   };
 
   const handleOpenProject = (projectId: string, targetView: AppView = 'project_hub') => {
@@ -344,9 +323,7 @@ export const App: React.FC = () => {
       if (current && current.rawTranscript.length > 0) {
         // Cria nova sessão para nova reunião se a anterior já foi encerrada com falas
         storageService.createNewSession(proj.id);
-        const updated = storageService.getActiveProject();
-        setActiveProject({ ...updated });
-        setProjects(storageService.getAllProjects());
+        refresh();
       }
     }
     setActiveView(targetView);
@@ -354,23 +331,18 @@ export const App: React.FC = () => {
 
   const handleStartFirstSession = () => {
     storageService.createNewSession(activeProject.id);
-    setActiveProject({ ...storageService.getActiveProject() });
-    setProjects(storageService.getAllProjects());
+    refresh();
   };
 
   const handleCreateProject = (name: string, description: string) => {
-    const newProj = storageService.createNewProject(name, description);
-    setProjects(storageService.getAllProjects());
-    setActiveProject(newProj);
+    const newProj = create(name, description);
     setActiveView('project_hub');
     showNotice('success', `Projeto "${newProj.name}" criado com sucesso!`);
   };
 
   const handleImportProjectJson = (jsonString: string) => {
     try {
-      const imported = storageService.importProject(jsonString);
-      setProjects(storageService.getAllProjects());
-      setActiveProject(imported);
+      const imported = importFromJson(jsonString);
       showNotice('success', `Projeto "${imported.name}" importado com sucesso!`);
     } catch (err: any) {
       showNotice('error', err?.message || 'Erro ao importar projeto.');
@@ -378,17 +350,12 @@ export const App: React.FC = () => {
   };
 
   const handleDeleteProject = (projectId: string) => {
-    const updated = storageService.deleteProject(projectId);
-    setProjects(updated);
-    const active = storageService.getActiveProject();
-    setActiveProject(active);
+    remove(projectId);
     showNotice('info', 'Projeto excluído com sucesso.');
   };
 
   const handleResetForOfficialTests = () => {
-    const clean = storageService.resetForOfficialTests();
-    setProjects(storageService.getAllProjects());
-    setActiveProject(clean);
+    reset();
     setActiveView('projects');
     showNotice('success', '🎉 Espaço 100% limpo e pronto para seus testes oficiais!');
   };
@@ -408,23 +375,18 @@ export const App: React.FC = () => {
       ...activeProject,
       sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
     };
-    setActiveProject(updatedProj);
-    storageService.saveActiveProject(updatedProj);
-    setProjects(storageService.getAllProjects());
+    saveProject(updatedProj);
     showNotice('info', 'Falas e tópicos desta reunião foram limpos com sucesso.');
   };
 
   const handleSelectSession = (sessionId: string) => {
     const updated = { ...activeProject, activeSessionId: sessionId };
-    setActiveProject(updated);
-    storageService.saveActiveProject(updated);
+    saveProject(updated);
   };
 
   const handleCreateSession = (title: string, participants: string[]) => {
     const session = storageService.createNewSession(activeProject.id, title, participants);
-    const updated = storageService.getActiveProject();
-    setActiveProject({ ...updated });
-    setProjects(storageService.getAllProjects());
+    refresh();
     showNotice('success', `Sala "${session.title}" criada e ativa!`);
   };
 
@@ -433,9 +395,7 @@ export const App: React.FC = () => {
       s.id === sessionId ? { ...s, title: newTitle } : s
     );
     const updatedProj = { ...activeProject, sessions: updatedSessions };
-    setActiveProject(updatedProj);
-    storageService.saveActiveProject(updatedProj);
-    setProjects(storageService.getAllProjects());
+    saveProject(updatedProj);
     showNotice('success', `Sala renomeada para "${newTitle}".`);
   };
 
@@ -532,9 +492,7 @@ export const App: React.FC = () => {
         sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
       };
 
-      setActiveProject(updatedProj);
-      storageService.saveActiveProject(updatedProj);
-      setProjects(storageService.getAllProjects());
+      saveProject(updatedProj);
 
       showNotice('success', `Análise concluída com sucesso! +${filteredNewQuestions.length} perguntas contextuais e +${addedNodesCount} nós no mapa mental.`);
     } catch (err: any) {
@@ -567,9 +525,7 @@ export const App: React.FC = () => {
       sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
     };
 
-    setActiveProject(updatedProj);
-    storageService.saveActiveProject(updatedProj);
-    setProjects(storageService.getAllProjects());
+    saveProject(updatedProj);
 
     showNotice('info', `${converted.length} falas importadas. Sintetizando mapa mental e perguntas...`);
 
@@ -630,9 +586,7 @@ export const App: React.FC = () => {
         sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
       };
 
-      setActiveProject(updatedProj);
-      storageService.saveActiveProject(updatedProj);
-      setProjects(storageService.getAllProjects());
+      saveProject(updatedProj);
       showNotice('success', `Importação concluída! +${filteredNewQuestions.length} perguntas e +${analysis.newMindMapNodes.length} tópicos gerados no mapa.`);
     } catch (e: any) {
       console.error('Erro ao analisar falas importadas:', e);
@@ -731,8 +685,7 @@ export const App: React.FC = () => {
       ...activeProject,
       sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
     };
-    setActiveProject(updatedProj);
-    storageService.saveActiveProject(updatedProj);
+    saveProject(updatedProj);
   };
 
   const handleUpdateTaskStatus = (
@@ -763,8 +716,7 @@ export const App: React.FC = () => {
     });
 
     const updatedProj = { ...activeProject, epics: updatedEpics };
-    setActiveProject(updatedProj);
-    storageService.saveActiveProject(updatedProj);
+    saveProject(updatedProj);
   };
 
   const handleGenerateBacklogWithAI = async () => {
@@ -802,8 +754,7 @@ export const App: React.FC = () => {
         if (useAiVersion) chosen = plan.replaced;
       }
 
-      const updated = storageService.updateProject(activeProject.id, p => ({ ...p, ...chosen }));
-      if (updated) syncAfterCommit(updated);
+      update(activeProject.id, p => ({ ...p, ...chosen }));
 
       const { added } = plan;
       const kept = plan.changed.length > 0 && chosen === plan.merged ? ` ${plan.changed.length} item(ns) seu(s) mantido(s).` : '';
@@ -872,8 +823,7 @@ export const App: React.FC = () => {
           <ProjectHubView
             project={activeProject}
             onUpdateProject={(updated) => {
-              setActiveProject(updated);
-              storageService.saveActiveProject(updated);
+              saveProject(updated);
             }}
             onNavigateToView={(view) => setActiveView(view)}
           />
@@ -1179,8 +1129,7 @@ export const App: React.FC = () => {
         onClose={() => setIsSettingsOpen(false)}
         project={activeProject}
         onProjectImported={(imported) => {
-          setProjects(storageService.getAllProjects());
-          setActiveProject(imported);
+          refresh();
           showNotice('success', `Projeto "${imported.name}" importado.`);
         }}
       />
