@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { githubCrawlerService, CrawlerLogEntry } from '../services/githubCrawlerService';
-import { callAI } from '../services/aiClient';
-import { storageService } from '../services/storageService';
+import { runStudioAgent } from '../services/studioAgentService';
 import {
   Bot,
   Play,
@@ -84,68 +83,9 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
 
   const handleRunSpecArchitect = async () => {
     setIsGeneratingSpec(true);
-    const key = storageService.getApiKey();
-    if (key) {
-      try {
-        const text = await callAI({
-          json: false,
-          temperature: 0.2,
-          systemPrompt:
-            'Você é o Principal Tech Architect AI do Discovery ao Done. Gere um documento canônico SPEC.md completo e de padrão militar para agentes de codificação de IA (Claude Code, Cursor, Antigravity, GitHub Copilot). ' +
-            'Estruture em Markdown com: 1. Princípios de Engenharia & SLA, 2. Modelos Canônicos de Dados (TypeScript interfaces/types), 3. Endpoints REST & Contratos de Serviço, 4. Cenários de Validação Automatizada (Gherkin BDD Given/When/Then), 5. Regras de Idempotência e Auditoria. Responda em português brasileiro.',
-          userPrompt: `Gere a SPEC.md completa para esta funcionalidade:\n${specInput}`
-        });
-        setGeneratedSpec(text);
-        setIsGeneratingSpec(false);
-        return;
-      } catch (e) {
-        console.warn('Erro ao chamar IA no Spec Architect, usando template:', e);
-      }
-    }
-    setTimeout(() => {
-      setGeneratedSpec(
-        `# SPEC.md: ${specInput}\n` +
-        `> **Documento Canônico de Arquitetura & Implementação para Agentes de Codificação de IA**\n` +
-        `> Gerado pelo Principal Tech Architect AI • Padrão Antigravity\n\n` +
-        `## 1. Princípios de Engenharia & SLA\n` +
-        `- **Precisão Monetária Centesimal:** Aritmética estritamente inteira (centavos inteiros \`BigInt\` ou \`number\` escalado). Proibido usar float/double IEEE 754.\n` +
-        `- **Performance:** Processamento de lote com 200 transações em < 30 segundos.\n` +
-        `- **Idempotência:** Todo lote de liquidação possui um \`idempotencyKey\` único.\n\n` +
-        `## 2. Modelos Canônicos de Dados (TypeScript)\n` +
-        `\`\`\`typescript\n` +
-        `export interface SettlementBatch {\n` +
-        `  batchId: string;\n` +
-        `  createdAt: string;\n` +
-        `  toleranceLimitCents: number; // ex: 100 centavos = R$ 1,00\n` +
-        `  totalAmountCents: number;\n` +
-        `  items: SettlementItem[];\n` +
-        `}\n\n` +
-        `export interface SettlementItem {\n` +
-        `  id: string;\n` +
-        `  merchantId: string;\n` +
-        `  grossAmountCents: number;\n` +
-        `  feeAmountCents: number;\n` +
-        `  netAmountCents: number;\n` +
-        `  discrepancyCents: number;\n` +
-        `  status: 'RECONCILED' | 'AUTO_APPROVED_TOLERANCE' | 'MANUAL_HOLD';\n` +
-        `}\n` +
-        `\`\`\`\n\n` +
-        `## 3. Endpoints REST & Contratos de Serviço\n` +
-        `- \`POST /api/v1/settlements/batches\` -> Submete novo lote para conciliação em background.\n` +
-        `- \`GET /api/v1/settlements/batches/:id/discrepancies\` -> Retorna transações isoladas para auditoria.\n` +
-        `- \`POST /api/v1/settlements/batches/:id/approve-tolerances\` -> Libera pagamento com provisão contábil.\n\n` +
-        `## 4. Cenários de Validação Automatizada (Gherkin BDD)\n` +
-        `\`\`\`gherkin\n` +
-        `Scenario: Conciliação automática com divergência aceitável de R$ 0,18\n` +
-        `  Given que o lojista possui extrato com divergência de 18 centavos (<= 100 centavos)\n` +
-        `  When o motor executar a reconciliação do lote em D+0\n` +
-        `  Then a transação é marcada como AUTO_APPROVED_TOLERANCE\n` +
-        `  And o repasse de 199 lojistas saudáveis não é paralisado\n` +
-        `  And um lançamento de débito de R$ 0,18 é registrado na conta transitória de perdas operacionais\n` +
-        `\`\`\``
-      );
-      setIsGeneratingSpec(false);
-    }, 800);
+    const result = await runStudioAgent('spec_architect', specInput);
+    setGeneratedSpec(result.text);
+    setIsGeneratingSpec(false);
   };
 
   const handleRunCrawler = async () => {
@@ -172,169 +112,30 @@ export const AgentStudioView: React.FC<AgentStudioViewProps> = ({
 
   const handleRunCoach = async () => {
     setIsPrescribing(true);
-    const key = storageService.getApiKey();
-    if (key) {
-      try {
-        const text = await callAI({
-          json: false,
-          temperature: 0.3,
-          systemPrompt:
-            'Você é o Agile Coach Prescriber AI no Discovery ao Done. Analise o desafio ou gargalo do time de produto/engenharia com base em métodos ágeis modernos (Flight Levels Klaus Leopold, SAFe, Kanban, Scrum, LeSS, Shape Up, OKRs). ' +
-            'Estruture em Markdown com: 🎯 Diagnóstico da Causa Raiz, 📚 Prática Recomendada do Acervo (com autor/método), e 🚀 Plano de Ação Imediato em 3 Passos concretos.',
-          userPrompt: `Problema / Cenário do time:\n${teamProblem}`
-        });
-        setCoachPrescription(text);
-        setIsPrescribing(false);
-        return;
-      } catch (e) {
-        console.warn('Erro ao chamar IA no Coach, usando template:', e);
-      }
-    }
-    setTimeout(() => {
-      setCoachPrescription(
-        `🎯 **Diagnóstico do Agile Coach AI:**\n\n` +
-        `**Problema Raiz Identificado:** Falta de visualização de dependências entre times (Silos Operacionais no Flight Level 1).\n\n` +
-        `**Prática Recomendada do Acervo:** **Flight Levels Nível 2 (Coordenação entre Times - Klaus Leopold)** combinado com o ritual de **Scrum of Scrums / PI Planning do SAFe**.\n\n` +
-        `**Plano de Ação Imediato:**\n` +
-        `1. Montar um Board Kanban L2 compartilhado entre os 6 squads listando apenas as entregas com dependência mútua.\n` +
-        `2. Limitar o WIP de projetos simultâneos em andamento no nível da coordenação para no máximo 3.\n` +
-        `3. Estabelecer reunião rápida de alinhamento L2 de 15 minutos às terças e quintas com 1 representante de cada squad (PO ou Tech Lead).`
-      );
-      setIsPrescribing(false);
-    }, 800);
+    const result = await runStudioAgent('coach', teamProblem);
+    setCoachPrescription(result.text);
+    setIsPrescribing(false);
   };
 
   const handleRunSlicer = async () => {
     setIsSlicing(true);
-    const key = storageService.getApiKey();
-    if (key) {
-      try {
-        const text = await callAI({
-          json: false,
-          temperature: 0.3,
-          systemPrompt:
-            'Você é o Story Slicer AI do Discovery ao Done, especialista em fatiamento vertical de épicos pelos métodos SPIDR (Spike, Path, Interface, Data, Rules de Mike Cohn) e PBB (Product Backlog Building de Fábio Aguiar). ' +
-            'Fatie este épico em 3 a 4 histórias verticais no padrão INVEST ("Como... Quero... Para..."), cada uma com Critérios de Aceite BDD Dado/Quando/Então (Gherkin).',
-          userPrompt: `Épico a ser fatiado:\n${epicToSlice}`
-        });
-        setSlicedStories(text);
-        setIsSlicing(false);
-        return;
-      } catch (e) {
-        console.warn('Erro ao chamar IA no Story Slicer, usando template:', e);
-      }
-    }
-    setTimeout(() => {
-      setSlicedStories(
-        `🔪 **Histórias Fatiadas via Método SPIDR & PBB:**\n\n` +
-        `**História 1 (Caminho Feliz - Paths):**\n` +
-        `Como Analista Financeiro, Quero processar o split para lojistas com dados válidos, Para que recebam em D+0.\n` +
-        `*BDD Dado/Quando/Então:* Dado que o arquivo de extrato não tem divergência, Quando o lote rodar, Então 100% dos lojistas são liquidados com log emitido.\n\n` +
-        `**História 2 (Regra de Tolerância - Rules):**\n` +
-        `Como CFO, Quero aprovar divergências de centavos até R$ 1,00 automaticamente, Para que o lote global de 200 lojas não fique congelado.\n` +
-        `*BDD Dado/Quando/Então:* Dado que a diferença é de R$ 0,18, Quando o lote processar, Então o pagamento segue e a diferença é debitada em conta transitória.\n\n` +
-        `**História 3 (Notificação Assíncrona - Interfaces):**\n` +
-        `Como Lojista B2B, Quero receber um webhook e email com o comprovante do repasse, Para ter transparência financeira sem abrir chamado no suporte.`
-      );
-      setIsSlicing(false);
-    }, 800);
+    const result = await runStudioAgent('slicer', epicToSlice);
+    setSlicedStories(result.text);
+    setIsSlicing(false);
   };
 
   const handleRunSynthesizer = async () => {
     setIsSynthesizing(true);
-    const key = storageService.getApiKey();
-    if (key) {
-      try {
-        const text = await callAI({
-          json: false,
-          temperature: 0.3,
-          systemPrompt:
-            'Você é o Discovery Synthesizer AI do Discovery ao Done. Analise as notas brutas de entrevista e produza uma síntese executiva em Markdown contendo: ' +
-            '1. Job To Be Done Principal (JTBD no formato Quando... Quero... Para...), 2. Dores Críticas Mapeadas (Pain Points com citações e impacto), 3. Oportunidades Priorizadas (Opportunity Solution Tree de Teresa Torres), 4. Hipótese Falsificável ("Acreditamos que... Saberemos que tivemos sucesso se...").',
-          userPrompt: `Notas da entrevista de discovery:\n${rawNotes}`
-        });
-        setSynthesizedDiscovery(text);
-        setIsSynthesizing(false);
-        return;
-      } catch (e) {
-        console.warn('Erro ao chamar IA no Discovery Synthesizer, usando template:', e);
-      }
-    }
-    setTimeout(() => {
-      setSynthesizedDiscovery(
-        `🎯 **Síntese Autônoma de Discovery & JTBD:**\n\n` +
-        `**1. Job To Be Done Principal (JTBD):**\n` +
-        `"Quando fecho as transações do mês, Quero conciliar e liquidar os repasses de 200 lojistas em menos de 1 hora com precisão centesimal, Para que eu encerre o fechamento contábil sem horas extras nem atrito com fornecedores."\n\n` +
-        `**2. Dores Críticas Mapeadas (Pain Points):**\n` +
-        `• Bloqueio em cascata: 1 divergência isolada de R$ 0,05 paralisa o pagamento de todos os outros 199 lojistas saudáveis.\n` +
-        `• Retrabalho manual: 4 dias desperdiçados cruzando planilhas manuais no Excel com relatórios bancários.\n` +
-        `• Chamados de suporte: Lojistas sem visibilidade do status do repasse sobrecarregando o time de atendimento.\n\n` +
-        `**3. Oportunidades Priorizadas (Opportunity Tree):**\n` +
-        `• Oportunidade A: Regra de tolerância parametrizável para diferenças menores que R$ 1,00.\n` +
-        `• Oportunidade B: Motor de conciliação assíncrono que processa lojistas válidos em lote e isola apenas as exceções.\n` +
-        `• Oportunidade C: Portal de autoatendimento e webhook de extrato para o lojista.\n\n` +
-        `**4. Hipótese Falsificável:**\n` +
-        `"Acreditamos que implementar o isolamento automático de exceções reduzirá o tempo de fechamento de 4 dias para 30 minutos. Saberemos que tivemos sucesso se o volume de tickets de reclamação de atraso cair em 80% nos primeiros 30 dias."`
-      );
-      setIsSynthesizing(false);
-    }, 800);
+    const result = await runStudioAgent('synthesizer', rawNotes);
+    setSynthesizedDiscovery(result.text);
+    setIsSynthesizing(false);
   };
 
   const handleRunJiraSync = async () => {
     setIsGeneratingJira(true);
-    const key = storageService.getApiKey();
-    if (key) {
-      try {
-        const text = await callAI({
-          json: false,
-          temperature: 0.2,
-          systemPrompt:
-            'Você é o Jira & DevOps Integration Agent do Discovery ao Done. Gere um payload JSON estrito, válido e bem estruturado para importação ou ingestão via API no Jira/Azure DevOps. O payload deve conter: projectKey, generatedAt, issues (com Epics e Stories com Acceptance Criteria BDD Gherkin, Story Points e Labels). Retorne apenas o código JSON formatado.',
-          userPrompt: `Gere o payload Jira JSON para a chave de projeto "${jiraProjectKey}", contendo épicos e histórias de usuário no padrão INVEST com critérios Given/When/Then.`
-        });
-        setJiraPayload(text);
-        setIsGeneratingJira(false);
-        return;
-      } catch (e) {
-        console.warn('Erro ao chamar IA no Jira Sync, usando fallback:', e);
-      }
-    }
-    setTimeout(() => {
-      const payload = {
-        projectKey: jiraProjectKey,
-        generatedAt: new Date().toISOString(),
-        issues: [
-          {
-            issueType: "Epic",
-            summary: "Motor de Conciliação e Split Inteligente",
-            description: "Permite a conciliação automática de extratos e liquidação em lote com isolamento de divergências.",
-            labels: ["discovery-to-done", "wave-1", "fintech"],
-            customFields: {
-              targetRelease: "2026-Q4",
-              wsjfScore: 8.5
-            }
-          },
-          {
-            issueType: "Story",
-            epicLink: `${jiraProjectKey}-101`,
-            summary: "Como Analista Financeiro, quero conciliar lotes automaticamente",
-            storyPoints: 5,
-            acceptanceCriteria: "Scenario: Conciliação com arquivo 100% válido\nGiven um extrato bancário de 200 transações\nWhen o motor executar a correspondência\nThen 200 transações recebem status CONCILIADO em menos de 30 segundos",
-            labels: ["mvp", "automated-flow"]
-          },
-          {
-            issueType: "Story",
-            epicLink: `${jiraProjectKey}-101`,
-            summary: "Como CFO, quero aprovar tolerância de centavos sem travar o lote",
-            storyPoints: 3,
-            acceptanceCriteria: "Scenario: Divergência dentro da margem de tolerância\nGiven uma diferença de R$ 0,15 em uma transação\nWhen o lote de liquidação for processado\nThen o split do lojista é concluído e a diferença é alocada na conta de provisão transitória",
-            labels: ["mvp", "rules-engine"]
-          }
-        ]
-      };
-      setJiraPayload(JSON.stringify(payload, null, 2));
-      setIsGeneratingJira(false);
-    }, 600);
+    const result = await runStudioAgent('jira_sync', jiraProjectKey);
+    setJiraPayload(result.text);
+    setIsGeneratingJira(false);
   };
 
   return (

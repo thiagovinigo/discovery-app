@@ -20,6 +20,7 @@ Gerado a partir de três diagnósticos (arquitetura, revisão React, mapa de pro
 | E3.4 Atalhos de teclado | Feito: handlers estáveis (`useCallback`) lendo do storage; sem avisos de hooks em `App.tsx`. Verificado no app com Alt+M |
 | E3.5 Gerador de backlog com merge | Feito (`planBacklogMerge`): incremento entra direto, alteração de item existente pede confirmação. Coberto por testes; não verificado no navegador (o `confirm()` trava a automação) |
 | E5.1 Dividir o `geminiService` | Feito: 663 → 127 linhas. Novos: `ai/types.ts`, `ai/normalizers.ts`, `ai/prompts.ts`, `ai/heuristics.ts` (todos abaixo de 400). A fachada manteve a API pública. 21 testes de caracterização escritos antes e passando depois; texto dos prompts verificado idêntico ao original |
+| E5.2 `AgentStudioView` sem `callAI` | Feito: novo `studioAgentService` (`runStudioAgent`, 5 agentes) e `studioTemplates`; os 5 handlers do componente viraram 4 linhas cada. Zero imports de `callAI` em `components/`. 15 testes novos; verificado no app com o Story Slicer |
 
 **Fase 1 concluída.** Próxima: Fase 2 (arquitetura), começando por E5.1 (dividir o `geminiService`) e E4.1 (fonte única de estado).
 | Fix: Sala ao Vivo em branco em projeto sem sessão | Feito (estado vazio com botão "Iniciar primeira sessão") |
@@ -83,6 +84,7 @@ Esforço: P (pequeno), M (médio), G (grande). Risco: B (baixo), M (médio), A (
 | E4.3 | Quebrar `App.tsx` em hooks (`useRecording`, `useShortcuts`, `useNotices`) | G | M | E4.1 | `App.tsx` com menos de 300 linhas |
 | E5.1 | Dividir `geminiService.ts` em `prompts/`, `heuristics/` e `provider` | M | M | E2.3 | Nenhum arquivo acima de 400 linhas |
 | E5.2 | `AgentStudioView` chama a IA via service, nunca `callAI` direto | M | B | E5.1 | Zero imports de `callAI` em `components/` |
+| E5.5 | Rotular o texto de exemplo dos agentes do Studio. Sem chave de IA (ou com a IA falhando), os 5 agentes mostram texto fixo de um caso fictício de conciliação financeira como se fosse gerado para a entrada do usuário. `runStudioAgent` já devolve `source: 'template'`; a tela deve exibir "Exemplo ilustrativo, configure uma chave de IA para gerar o seu" quando for o caso | P | B | E5.2 | Sem chave, o resultado de qualquer agente vem com um aviso visível de que é exemplo |
 | E5.4 | Corrigir a heurística offline, que analisa o texto **com o rótulo do falante** (`Usuário: "fala"`). Como "usuário" é palavra-chave da regra de cliente, toda fala de "Usuário / Stakeholder" gera "Atrito com o Cliente", a pergunta de churn e um job, qualquer que seja o conteúdo. Analisar só o texto da fala. O teste que documenta o comportamento atual (`geminiService.test.ts`) deve ser invertido | P | B | E5.1 | Uma fala sem assunto de cliente não gera itens de cliente, mesmo vinda de "Usuário / Stakeholder" |
 | E5.3 | Dividir `DiscoveryToDoneView`, `AgentStudioView` e `Header` | G | M | E4.3 | Todos com menos de 400 linhas |
 
