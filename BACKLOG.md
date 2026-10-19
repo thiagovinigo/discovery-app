@@ -13,6 +13,9 @@ Gerado a partir de três diagnósticos (arquitetura, revisão React, mapa de pro
 | E2.2 Vitest | Feito (`npm test`, `npm run coverage`) |
 | E2.3 Testes de caracterização | Feito: `storageService` 81%, `exportService` 97%, `parseJsonLoose` coberto |
 | E2.4 Backup JSON | Já existia no `ApiKeyModal`; agora com teste do ciclo exportar e reimportar. Só `id`, `name` e `updatedAt` mudam na importação |
+| E3.1 Closure da gravação | Feito: fala gravada na hora, análise mesclada depois (`sessionService`). Verificado na simulação da Sala ao Vivo (0 → 6 falas) |
+| E3.2 Storage respeita `projectId` | Feito (`updateProject` imutável) |
+| E3.6 Ids únicos | Feito (`crypto.randomUUID` com fallback) |
 | Fix: Sala ao Vivo em branco em projeto sem sessão | Feito (estado vazio com botão "Iniciar primeira sessão") |
 
 O teste `it.fails` de `addBugReport` (em `storageService.test.ts`) documenta o bug de E3.2 e deve virar teste normal quando E3.2 for corrigido.
@@ -85,6 +88,19 @@ Esforço: P (pequeno), M (médio), G (grande). Risco: B (baixo), M (médio), A (
 | E6.3 | Fundir `po_space` e `product_audit` no Copiloto com papéis claros; `agent_studio` mantém agentes e crawler, sem as funções duplicadas; `knowledge_hub` vira Biblioteca | G | A | E5.2 | Usuário identifica o papel de cada agente; nada removido |
 | E6.5 | Parar de exportar conteúdo fixo no PRD: `exportToPRD` escreve aprovações fictícias (Product Lead, Tech Lead, CFO com nomes e "Aprovado"), roadmap de conciliação financeira, DoR/DoD e não-audiência iguais para qualquer projeto. Gerar só a partir dos dados do projeto, com campos vazios quando faltar informação | M | M | - | PRD de um projeto novo não contém nomes, aprovações nem roadmap que o usuário não escreveu |
 | E6.4 | Gerar o backlog a partir de várias sessões selecionadas | M | M | E3.5 | Dá para escolher N sessões como entrada |
+
+### Épico E7: Tipo de conversa e foco da sessão (pedido do PO)
+
+Hoje toda sala é tratada como entrevista de discovery: as perguntas sugeridas, a análise e as heurísticas offline assumem Mom Test, JTBD e 5 Porquês. Uma reunião de alinhamento ou de refinamento precisa de perguntas e de saídas diferentes.
+
+| ID | Item | Esforço | Risco | Depende de | Aceite |
+|---|---|---|---|---|---|
+| E7.1 | Campo `type` na sessão (`discovery`, `alignment`, `refinement`), escolhido ao criar a sala e editável na sala. Sessões antigas assumem `discovery` | P | B | E3.2 | Criar uma sala de cada tipo; as antigas abrem como discovery |
+| E7.2 | Prompts e heurísticas offline por tipo. **Discovery:** Mom Test, JTBD, 5 Porquês. **Alinhamento:** decisões, responsáveis, prazos, bloqueios e riscos. **Refinamento:** critérios de aceite, escopo, dependências, estimativa e DoR | M | M | E7.1, E5.1 | A mesma fala gera perguntas diferentes conforme o tipo |
+| E7.3 | Foco da sessão: campo editável ("o que queremos resolver agora") que entra no prompt, e botão **Propor novas perguntas** para o foco atual | M | M | E7.2 | Mudar o foco no meio da sala muda as próximas perguntas sugeridas, sem apagar as anteriores |
+| E7.4 | Saídas por tipo. **Alinhamento:** ata, itens de ação e entradas no Decision Log. **Refinamento:** alimenta histórias e critérios no Backlog. **Discovery:** dores, JTBD e mapa mental, como hoje | M | M | E7.2, E6.2 | Cada tipo encerra com a saída própria, sem duplicar telas |
+
+Perguntas em aberto (PO): outros tipos além dos três (retrospectiva, 1:1, planejamento)? O mapa mental e o fluxo do usuário aparecem só em discovery? O tipo pode mudar no meio da sala?
 
 ### Fase 4: Acabamento (depois)
 
