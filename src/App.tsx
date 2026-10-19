@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   DiscoveryProject,
   MeetingSession,
@@ -7,7 +7,7 @@ import {
 } from './types/discovery';
 import { storageService } from './services/storageService';
 import { geminiService } from './services/geminiService';
-import { appendSegment, applyLiveAnalysis } from './services/sessionService';
+import { appendSegment, applyLiveAnalysis, markQuestionAsked } from './services/sessionService';
 import { planBacklogMerge } from './services/backlogMerge';
 import { audioService, type AudioStatus } from './services/audioService';
 import { transcribeAudioWithWhisper } from './services/openAiClient';
@@ -82,11 +82,11 @@ export const App: React.FC = () => {
     isInformalChatRef.current = isInformalChatMode;
   }, [isInformalChatMode]);
 
-  const showNotice = (type: 'error' | 'info' | 'success', text: string) => {
+  const showNotice = useCallback((type: 'error' | 'info' | 'success', text: string) => {
     setNotice({ type, text });
     if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
     noticeTimerRef.current = setTimeout(() => setNotice(null), 8000);
-  };
+  }, []);
 
   // Initialize projects from storage
   useEffect(() => {
@@ -115,6 +115,110 @@ export const App: React.FC = () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     };
   }, [isRecording]);
+
+  // Reflete no estado do React o projeto que acabou de ser gravado no storage
+  const syncAfterCommit = useCallback((updated: DiscoveryProject) => {
+    if (storageService.getActiveProject().id === updated.id) setActiveProject(updated);
+    setProjects(storageService.getAllProjects());
+  }, []);
+
+  // Incoming Speech or Simulation Chunk.
+  // O callback de áudio é criado uma única vez ao iniciar a gravação e guarda cópias antigas do estado
+  // do React, por isso a sessão é lida do storage a cada fala. A fala é gravada antes de esperar a IA, e a
+  // análise é mesclada depois sobre a sessão atual, sem tocar na transcrição.
+  const handleIncomingTranscript = useCallback(async (
+    speaker: 'Entrevistador (PM)' | 'Usuário / Stakeholder',
+    text: string
+  ) => {
+    const project = storageService.getActiveProject();
+    const session = project.sessions.find(s => s.id === project.activeSessionId) || project.sessions[0];
+    if (!session) return;
+
+    const lowered = text.toLowerCase();
+    const newSeg: TranscriptSegment = {
+      id: 'seg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      speaker,
+      text,
+      timestamp: new Date().toLocaleTimeString('pt-BR', { minute: '2-digit', second: '2-digit' }),
+      isFinal: true,
+      highlightType: lowered.includes('trava') || lowered.includes('caos') || lowered.includes('dor')
+        ? 'pain'
+        : lowered.includes('queria') || lowered.includes('se tivesse')
+        ? 'jtbd'
+        : undefined
+    };
+
+    const withSegment = appendSegment(project.id, session.id, newSeg);
+    if (withSegment) syncAfterCommit(withSegment);
+
+    // Modo Bate-Papo Informal: salva a fala sem acionar IA (economiza tokens e preserva foco)
+    if (isInformalChatRef.current) return;
+
+    const recent = [...session.rawTranscript, newSeg].slice(-4).map(s => ({ speaker: s.speaker, text: s.text }));
+    const analysis = await geminiService.analyzeLiveConversation(recent, project.description);
+    if (analysis.error) {
+      // Evita repetir o mesmo aviso a cada fala
+      if (analysis.error !== lastAiErrorRef.current) {
+        lastAiErrorRef.current = analysis.error;
+        showNotice('info', `IA offline: ${analysis.error}`);
+      }
+    } else {
+      lastAiErrorRef.current = '';
+    }
+
+    const withAnalysis = applyLiveAnalysis(project.id, session.id, analysis);
+    if (withAnalysis) syncAfterCommit(withAnalysis);
+  }, [showNotice, syncAfterCommit]);
+
+  // Audio Capture Controls
+  const handleStartRecording = useCallback(async (source: 'mic' | 'tab') => {
+    try {
+      const onTranscript = (text: string, isFinal: boolean) => {
+        if (!text.trim()) return;
+        if (isFinal) {
+          handleIncomingTranscript('Usuário / Stakeholder', text);
+        }
+      };
+
+      const onStatus = (status: AudioStatus) => {
+        if (status.state === 'listening') {
+          showNotice('success', status.message || 'Microfone conectado! Falando agora...');
+        } else if (status.state === 'error') {
+          showNotice('error', status.message || 'Erro na captura de áudio.');
+          setIsRecording(false);
+        } else if (status.state === 'unsupported') {
+          showNotice('error', status.message || 'Navegador não suporta Web Speech API.');
+          setIsRecording(false);
+        } else if (status.state === 'stopped') {
+          setIsRecording(false);
+        }
+      };
+
+      if (source === 'mic') {
+        await audioService.startMicrophoneCapture(onTranscript, onStatus);
+      } else {
+        await audioService.startTabAudioCapture(onTranscript, onStatus);
+      }
+
+      setIsRecording(true);
+    } catch (e: any) {
+      showNotice('error', `Não foi possível iniciar a captura: ${e?.message || e}`);
+      setIsRecording(false);
+    }
+  }, [handleIncomingTranscript, showNotice]);
+
+  const handleStopRecording = useCallback(() => {
+    audioService.stopCapture();
+    setIsRecording(false);
+  }, []);
+
+  const handleMarkQuestionAsked = useCallback((questionId: string) => {
+    const project = storageService.getActiveProject();
+    const session = project.sessions.find(s => s.id === project.activeSessionId) || project.sessions[0];
+    if (!session) return;
+    const updated = markQuestionAsked(project.id, session.id, questionId);
+    if (updated) syncAfterCommit(updated);
+  }, [syncAfterCommit]);
 
   // Global Keyboard Shortcuts (Atalhos Globais recomendados pelo Especialista de UX)
   useEffect(() => {
@@ -147,7 +251,8 @@ export const App: React.FC = () => {
         // Ctrl + M ou Alt + M: Marcar próxima pergunta do Prompter como feita
         if ((e.ctrlKey || e.altKey) && (e.key === 'm' || e.key === 'M')) {
           e.preventDefault();
-          const sess = activeProject?.sessions.find(s => s.id === activeProject.activeSessionId) || activeProject?.sessions[0];
+          const project = storageService.getActiveProject();
+          const sess = project.sessions.find(s => s.id === project.activeSessionId) || project.sessions[0];
           const unasked = sess?.liveQuestions.find(q => !q.asked);
           if (unasked) {
             handleMarkQuestionAsked(unasked.id);
@@ -160,7 +265,7 @@ export const App: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeView, isRecording, activeProject]);
+  }, [activeView, isRecording, handleStartRecording, handleStopRecording, handleMarkQuestionAsked, showNotice]);
 
   if (!activeProject) return null;
 
@@ -324,102 +429,6 @@ export const App: React.FC = () => {
     storageService.saveActiveProject(updatedProj);
     setProjects(storageService.getAllProjects());
     showNotice('success', `Sala renomeada para "${newTitle}".`);
-  };
-
-  // Audio Capture Controls
-  const handleStartRecording = async (source: 'mic' | 'tab') => {
-    try {
-      const onTranscript = (text: string, isFinal: boolean) => {
-        if (!text.trim()) return;
-        if (isFinal) {
-          handleIncomingTranscript('Usuário / Stakeholder', text);
-        }
-      };
-
-      const onStatus = (status: AudioStatus) => {
-        if (status.state === 'listening') {
-          showNotice('success', status.message || 'Microfone conectado! Falando agora...');
-        } else if (status.state === 'error') {
-          showNotice('error', status.message || 'Erro na captura de áudio.');
-          setIsRecording(false);
-        } else if (status.state === 'unsupported') {
-          showNotice('error', status.message || 'Navegador não suporta Web Speech API.');
-          setIsRecording(false);
-        } else if (status.state === 'stopped') {
-          setIsRecording(false);
-        }
-      };
-
-      if (source === 'mic') {
-        await audioService.startMicrophoneCapture(onTranscript, onStatus);
-      } else {
-        await audioService.startTabAudioCapture(onTranscript, onStatus);
-      }
-
-      setIsRecording(true);
-    } catch (e: any) {
-      showNotice('error', `Não foi possível iniciar a captura: ${e?.message || e}`);
-      setIsRecording(false);
-    }
-  };
-
-  const handleStopRecording = () => {
-    audioService.stopCapture();
-    setIsRecording(false);
-  };
-
-  // Reflete no estado do React o projeto que acabou de ser gravado no storage
-  const syncAfterCommit = (updated: DiscoveryProject) => {
-    if (storageService.getActiveProject().id === updated.id) setActiveProject(updated);
-    setProjects(storageService.getAllProjects());
-  };
-
-  // Incoming Speech or Simulation Chunk.
-  // O callback de áudio é criado uma única vez ao iniciar a gravação e guarda cópias antigas do estado
-  // do React, por isso a sessão é lida do storage a cada fala. A fala é gravada antes de esperar a IA, e a
-  // análise é mesclada depois sobre a sessão atual, sem tocar na transcrição.
-  const handleIncomingTranscript = async (
-    speaker: 'Entrevistador (PM)' | 'Usuário / Stakeholder',
-    text: string
-  ) => {
-    const project = storageService.getActiveProject();
-    const session = project.sessions.find(s => s.id === project.activeSessionId) || project.sessions[0];
-    if (!session) return;
-
-    const lowered = text.toLowerCase();
-    const newSeg: TranscriptSegment = {
-      id: 'seg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-      speaker,
-      text,
-      timestamp: new Date().toLocaleTimeString('pt-BR', { minute: '2-digit', second: '2-digit' }),
-      isFinal: true,
-      highlightType: lowered.includes('trava') || lowered.includes('caos') || lowered.includes('dor')
-        ? 'pain'
-        : lowered.includes('queria') || lowered.includes('se tivesse')
-        ? 'jtbd'
-        : undefined
-    };
-
-    const withSegment = appendSegment(project.id, session.id, newSeg);
-    if (withSegment) syncAfterCommit(withSegment);
-
-    // Modo Bate-Papo Informal: salva a fala sem acionar IA (economiza tokens e preserva foco)
-    if (isInformalChatRef.current) return;
-
-    const recent = [...session.rawTranscript, newSeg].slice(-4).map(s => ({ speaker: s.speaker, text: s.text }));
-    const analysis = await geminiService.analyzeLiveConversation(recent, project.description);
-    if (analysis.error) {
-      // Evita repetir o mesmo aviso a cada fala
-      if (analysis.error !== lastAiErrorRef.current) {
-        lastAiErrorRef.current = analysis.error;
-        showNotice('info', `IA offline: ${analysis.error}`);
-      }
-    } else {
-      lastAiErrorRef.current = '';
-    }
-
-    const withAnalysis = applyLiveAnalysis(project.id, session.id, analysis);
-    if (withAnalysis) syncAfterCommit(withAnalysis);
   };
 
   // Análise manual ou por lote acionada pelo usuário para toda a conversa
@@ -698,20 +707,6 @@ export const App: React.FC = () => {
     };
     reader.readAsText(file);
     e.target.value = '';
-  };
-
-  const handleMarkQuestionAsked = (questionId: string) => {
-    if (!currentSession) return;
-    const updatedQuestions = currentSession.liveQuestions.map(q =>
-      q.id === questionId ? { ...q, asked: true } : q
-    );
-    const updatedSession = { ...currentSession, liveQuestions: updatedQuestions };
-    const updatedProj = {
-      ...activeProject,
-      sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
-    };
-    setActiveProject(updatedProj);
-    storageService.saveActiveProject(updatedProj);
   };
 
   const handleAddFlowStep = (stepData: Omit<UserFlowStep, 'id'>) => {

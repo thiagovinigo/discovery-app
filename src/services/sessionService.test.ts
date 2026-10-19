@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { storageService } from './storageService';
-import { applyLiveAnalysis, appendSegment } from './sessionService';
+import { applyLiveAnalysis, appendSegment, markQuestionAsked } from './sessionService';
 import type { AnalysisResponse } from './geminiService';
 import type { TranscriptSegment } from '../types/discovery';
 
@@ -72,6 +72,31 @@ describe('appendSegment', () => {
 
     const otherSaved = storageService.getAllProjects().find(p => p.id === projectId)!.sessions.find(s => s.id === other.id)!;
     expect(otherSaved.rawTranscript).toEqual([]);
+  });
+});
+
+describe('markQuestionAsked', () => {
+  it('marca só a pergunta indicada como feita e persiste', () => {
+    applyLiveAnalysis(projectId, sessionId, { ...emptyAnalysis(), newQuestions: [question('A'), question('B')] });
+
+    markQuestionAsked(projectId, sessionId, 'q-A');
+
+    const byText = Object.fromEntries(currentSession().liveQuestions.map(q => [q.question, q.asked]));
+    expect(byText).toEqual({ A: true, B: false });
+  });
+
+  it('é idempotente: marcar de novo não muda nada', () => {
+    applyLiveAnalysis(projectId, sessionId, { ...emptyAnalysis(), newQuestions: [question('A')] });
+
+    markQuestionAsked(projectId, sessionId, 'q-A');
+    markQuestionAsked(projectId, sessionId, 'q-A');
+
+    expect(currentSession().liveQuestions).toHaveLength(1);
+    expect(currentSession().liveQuestions[0].asked).toBe(true);
+  });
+
+  it('devolve undefined quando a sessão não existe', () => {
+    expect(markQuestionAsked(projectId, 'nao-existe', 'q-A')).toBeUndefined();
   });
 });
 

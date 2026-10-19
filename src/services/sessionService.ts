@@ -84,6 +84,18 @@ export function appendSegment(
   return updateSession(projectId, sessionId, s => ({ ...s, rawTranscript: [...s.rawTranscript, segment] }));
 }
 
+/** Marca uma pergunta do prompter como já feita. */
+export function markQuestionAsked(
+  projectId: string,
+  sessionId: string,
+  questionId: string
+): DiscoveryProject | undefined {
+  return updateSession(projectId, sessionId, s => ({
+    ...s,
+    liveQuestions: s.liveQuestions.map(q => (q.id === questionId ? { ...q, asked: true } : q))
+  }));
+}
+
 /** Aplica o resultado de uma análise ao vivo sem tocar na transcrição, que pode ter crescido enquanto a IA respondia. */
 export function applyLiveAnalysis(
   projectId: string,
