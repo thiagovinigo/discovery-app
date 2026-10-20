@@ -1,6 +1,7 @@
 import { callAI, parseJsonLoose } from './aiClient';
 import { buildProjectContext } from './agentService';
 import { newId } from './ids';
+import { filterQuestions } from './interviewQuestionService';
 import { plain, searchProjectKnowledge } from './knowledgeService';
 import { storageService } from './storageService';
 import type {
@@ -213,7 +214,7 @@ const SPEC_RULES: ProbeRule[] = [
 const PRD_RULES: ProbeRule[] = [
   {
     pattern: /problema|\bdor\b|dificuldade|demora|atraso|perda/,
-    probe: { target: 'prd', question: 'Qual é o impacto mensurável desse problema hoje (tempo, custo, erros) e com que frequência acontece?', why: 'O PRD precisa de um problema quantificado para justificar a prioridade.' }
+    probe: { target: 'prd', question: 'Na última vez que isso aconteceu, quanto tempo, dinheiro ou retrabalho custou? E quantas vezes por mês acontece?', why: 'O PRD precisa de um problema quantificado para justificar a prioridade.' }
   },
   {
     pattern: /usuario|cliente|pessoa|equipe|recepc|paciente/,
@@ -221,7 +222,7 @@ const PRD_RULES: ProbeRule[] = [
   },
   {
     pattern: /botao|\btela\b|\bapp\b|aplicativo|dashboard|funcionalidade|quero um/,
-    probe: { target: 'prd', question: 'Se essa solução não existisse, o que você faria para resolver isso hoje?', why: 'Separa a necessidade real da solução sugerida (Mom Test).' }
+    probe: { target: 'prd', question: 'O que você faz hoje, na prática, para resolver isso? Descreva a última vez, passo a passo.', why: 'Separa a necessidade real da solução sugerida (Mom Test): o que a pessoa faz hoje vale mais do que o que ela diz que faria.' }
   },
   {
     pattern: /\d+ ?(%|horas|dias|reais|r\$|mil)/,
@@ -243,13 +244,13 @@ function gapProbes(project: DiscoveryProject): AssistantProbe[] {
   const prd = project.prd;
   const gaps: AssistantProbe[] = [];
   if (prd.successMetrics.length === 0 && !prd.northStarMetric) {
-    gaps.push({ target: 'prd', question: 'Como você saberá que deu certo? Que métrica e que meta indicam sucesso?', why: 'O PRD ainda não tem métricas de sucesso.' });
+    gaps.push({ target: 'prd', question: 'Hoje, que número vocês olham para saber se isso está bom ou ruim? Qual foi o valor no último mês?', why: 'O PRD ainda não tem métricas de sucesso.' });
   }
   if (prd.inScope.length === 0) {
     gaps.push({ target: 'prd', question: 'O que entra e o que fica de fora da primeira versão?', why: 'O PRD ainda não define o escopo.' });
   }
   if (prd.assumptions.length === 0) {
-    gaps.push({ target: 'prd', question: 'O que você está assumindo que ainda não foi confirmado com ninguém?', why: 'O PRD ainda não registra premissas.' });
+    gaps.push({ target: 'prd', question: 'Qual parte disso vocês acreditam ser verdade, mas nunca mediram ou confirmaram com dados? Qual foi a última vez que alguém conferiu?', why: 'O PRD ainda não registra premissas.' });
   }
   return gaps;
 }
@@ -286,7 +287,7 @@ const REFINEMENT_PROBES: AssistantProbe[] = [
   { target: 'spec', question: 'De que outras partes do sistema ou de quais times essa entrega depende?', why: 'Dependências escondidas são a principal causa de atraso.' },
   { target: 'spec', question: 'É possível dividir isso em partes menores que entreguem valor sozinhas?', why: 'Histórias menores são mais fáceis de estimar e validar (INVEST).' },
   { target: 'spec', question: 'O que está de fora desta história e fica para depois?', why: 'Deixar o limite explícito evita que o escopo cresça sem querer.' },
-  { target: 'spec', question: 'Como você estimaria o esforço, e o que ainda é incerto?', why: 'A incerteza declarada mostra onde falta conversar antes de começar.' }
+  { target: 'spec', question: 'Que partes dessa entrega o time já fez antes, e quanto tempo levaram? O que é novo e ainda incerto?', why: 'A incerteza declarada mostra onde falta conversar antes de começar.' }
 ];
 
 function refinementProbes(alreadyAsked: string[]): AssistantProbe[] {
@@ -322,6 +323,14 @@ export function assistOffline(
   }
 }
 
+/** Regras que toda pergunta de entrevista sugerida pela IA deve seguir (também usadas no prompt da análise ao vivo). */
+export const INTERVIEW_QUESTION_RULES =
+  'REGRAS PARA CADA PERGUNTA: (1) pergunte sobre fatos do passado recente, nunca sobre o que a pessoa faria, usaria ou pagaria; ' +
+  '(2) cite as palavras do entrevistado entre aspas, para ancorar a pergunta no que ele disse; (3) peça número, data, nome, ' +
+  'tempo ou o passo a passo do último caso, em vez de opinião ("o que você acha"); (4) evite perguntas de sim ou não e ' +
+  'perguntas que sopram a resposta ("você não acha que..."); (5) uma pergunta só, sem juntar várias. ' +
+  'Ruim: "Você usaria um app para isso?" Bom: "Quando foi a última vez que o fechamento travou? Quanto tempo levou para resolver?".';
+
 const SYSTEM_PROMPTS: Record<MeetingType, string> = {
   interview:
     'Você é o assistente de quem está SENDO ENTREVISTADO (o Product Owner). Leia o trecho da conversa e, para cada pergunta ' +
@@ -336,6 +345,7 @@ const SYSTEM_PROMPTS: Record<MeetingType, string> = {
     'Você acompanha uma entrevista de DISCOVERY conduzida pelo Product Owner. Leia o trecho e sugira até 4 perguntas profundas ' +
     'e específicas (Mom Test, 5 porquês), pensando no que falta para escrever o PRD (problema, público, métricas, escopo, riscos) ' +
     'e a SPEC (dados, regras, integrações, permissões, exceções, requisitos não funcionais). Não repita perguntas já feitas. ' +
+    INTERVIEW_QUESTION_RULES + ' ' +
     'Responda só com JSON: {"probes":[{"question":"...","why":"...","target":"prd"|"spec"}]}.',
   refinement:
     'Você acompanha uma reunião de REFINAMENTO. Leia o trecho e sugira até 4 perguntas sobre critérios de aceite, dependências, ' +
@@ -361,10 +371,11 @@ function parseAiOutput(mode: MeetingType, parsed: any): Pick<AssistantOutput, 'a
       .filter((t: AssistantTopic) => t.title && t.ideas.length > 0);
     return { topics };
   }
-  const probes = (Array.isArray(parsed?.probes) ? parsed.probes : [])
+  const valid: AssistantProbe[] = (Array.isArray(parsed?.probes) ? parsed.probes : [])
     .map((p: any) => ({ question: asText(p?.question), why: asText(p?.why), target: p?.target }))
-    .filter((p: AssistantProbe) => p.question && (p.target === 'prd' || p.target === 'spec'))
-    .slice(0, MAX_PROBES);
+    .filter((p: AssistantProbe) => p.question && (p.target === 'prd' || p.target === 'spec'));
+  // Tira as perguntas subjetivas (hipotéticas, de opinião, indutivas) que a IA ainda assim devolver
+  const probes = (mode === 'discovery' ? filterQuestions(valid) : valid).slice(0, MAX_PROBES);
   return { probes };
 }
 

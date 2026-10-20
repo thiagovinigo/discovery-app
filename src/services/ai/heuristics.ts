@@ -114,7 +114,7 @@ export function heuristicAnalysis(text: string): AnalysisResponse {
   if (/(dinheiro|custo|custos|perda|perdemos|prejuízo|gasto|taxa|multa|estorno|chargeback|valor|faturamento)/i.test(lower)) {
     questions.push({
       id: 'hq-cost-' + Date.now(),
-      question: 'Você consegue estimar quanto dinheiro a empresa já perdeu ou deixou de ganhar por causa dessa falha?',
+      question: 'Na última vez que essa falha aconteceu, quanto dinheiro foi perdido ou deixou de entrar? Como vocês chegaram nesse número?',
       reason: 'Quantificação financeira para cálculo de ROI e priorização no backlog.',
       category: 'quantification',
       asked: false,
@@ -134,7 +134,7 @@ export function heuristicAnalysis(text: string): AnalysisResponse {
   if (/(cliente|clientes|usuário|usuários|lojista|lojistas|suporte|sac|reclamação|reclamam|furioso|insatisfeito|churn|cancelar)/i.test(lower)) {
     questions.push({
       id: 'hq-customer-' + Date.now(),
-      question: 'O cliente já chegou a ameaçar cancelar ou buscar o concorrente por causa disso?',
+      question: 'Qual foi o último cliente que reclamou disso? O que ele disse, o que vocês responderam e o que aconteceu depois?',
       reason: 'Validação de risco de Churn e urgência da solução na percepção do usuário.',
       category: 'risk_validation',
       asked: false,
@@ -161,7 +161,7 @@ export function heuristicAnalysis(text: string): AnalysisResponse {
   if (/(queria|gostaria|se tivesse|precisamos|botão|tela|dashboard|notificação|funcionalidade|recurso)/i.test(lower)) {
     questions.push({
       id: 'hq-solution-' + Date.now(),
-      question: 'Se não pudéssemos construir isso agora, qual seria a alternativa mínima aceitável para resolver o problema hoje?',
+      question: 'O que vocês fazem hoje para contornar isso? Descreva o passo a passo da última vez e onde deu errado.',
       reason: 'Desafiar soluções prematuras para entender a real necessidade de negócio por trás do pedido.',
       category: 'premature_solution',
       asked: false,
@@ -211,7 +211,7 @@ export function heuristicAnalysis(text: string): AnalysisResponse {
   if (questions.length < 2) {
     questions.push({
       id: 'hq-5w-' + Date.now(),
-      question: 'E por que isso é tão crítico para a estratégia da sua área neste momento do ano?',
+      question: 'Que decisão, prazo ou meta da sua área foi afetada por isso na última vez? Me dê um exemplo recente.',
       reason: '5 Porquês: conectar o detalhe operacional ao objetivo estratégico da liderança.',
       category: 'five_whys',
       asked: false,

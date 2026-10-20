@@ -240,9 +240,27 @@ describe('applyLiveAnalysis', () => {
 
     applyLiveAnalysis(projectId, sessionId, emptyAnalysis());
 
-    const questions = currentSession().liveQuestions;
+    const questions = currentSession().liveQuestions.filter(q => q.id.startsWith('tq-'));
     expect(questions.length).toBeGreaterThan(0);
     expect(questions.every(q => q.question.toLowerCase().includes('cadastro'))).toBe(true);
+  });
+
+  it('acrescenta pergunta de aprofundamento ancorada na última fala do entrevistado', () => {
+    appendSegments(projectId, sessionId, [
+      { ...segment(1), text: 'Os relatórios sempre chegam errados do financeiro' },
+    ]);
+
+    applyLiveAnalysis(projectId, sessionId, emptyAnalysis());
+
+    const followUp = currentSession().liveQuestions.find(q => q.id.startsWith('fu-'));
+    expect(followUp?.question).toContain('sempre chegam errados');
+    expect(followUp?.question).toMatch(/última vez/i);
+  });
+
+  it('mantém como vieram as perguntas da própria análise (o filtro de subjetivas fica no geminiService)', () => {
+    applyLiveAnalysis(projectId, sessionId, { ...emptyAnalysis(), newQuestions: [question('Quanto custa?')] });
+
+    expect(currentSession().liveQuestions.map(q => q.question)).toContain('Quanto custa?');
   });
 
   it('não repete as perguntas por tópico numa segunda análise', () => {

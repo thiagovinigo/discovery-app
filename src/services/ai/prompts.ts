@@ -56,7 +56,7 @@ Seu objetivo é analisar em tempo real este trecho de conversa de discovery e re
 
 REGRAS CRÍTICAS:
 1. Retorne APENAS o objeto JSON puro, sem markdown, sem backticks (\`\`\`json).
-2. As perguntas devem ser extremamente táticas (Mom Test: focar no passado real, quantificar impacto financeiro ou desafiar quando o usuário pedir 'um botão' em vez de falar da dor real).
+2. As perguntas devem ser extremamente táticas e objetivas (Mom Test: focar no passado real, quantificar impacto financeiro ou desafiar quando o usuário pedir 'um botão' em vez de falar da dor real). Cada pergunta: (a) cita entre aspas as palavras do entrevistado que a originaram; (b) pergunta sobre um fato do passado recente, nunca sobre o que a pessoa faria, usaria ou pagaria; (c) pede número, data, nome, tempo ou o passo a passo do último caso, nunca opinião ("o que você acha"); (d) não é de sim ou não nem sopra a resposta ("você não acha que..."); (e) é uma pergunta só. Ruim: "Você usaria um app para isso?". Bom: "Você disse 'a conferência demora'. Quantas horas levou na última vez e quem participou?".
 3. Mantenha em português brasileiro.`;
 
 export const BACKLOG_SYSTEM_PROMPT = `Você é um Principal Product Manager sênior. Baseado em todas as entrevistas e dores validadas abaixo, estruture a decomposição completa "Discovery ao Done" contendo:

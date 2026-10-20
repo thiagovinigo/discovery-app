@@ -131,14 +131,14 @@ describe('deepProbes (discovery: perguntas profundas para PRD e SPEC)', () => {
     const byPrd = probes.filter(p => p.target === 'prd');
     expect(bySpec.some(p => /sistemas|dados|frequência/i.test(p.question))).toBe(true);
     expect(bySpec.some(p => /exceç/i.test(p.question))).toBe(true);
-    expect(byPrd.some(p => /impacto|mensur/i.test(p.question))).toBe(true);
+    expect(byPrd.some(p => /impacto|quanto tempo|retrabalho/i.test(p.question))).toBe(true);
     expect(probes.every(p => p.why.length > 0)).toBe(true);
   });
 
   it('aponta lacunas do PRD (ainda sem métricas de sucesso) quando a conversa já começou', () => {
     const probes = deepProbes(load(), ['Falamos um pouco sobre o dia a dia da recepção'], []);
 
-    expect(probes.some(p => p.target === 'prd' && /métrica|meta|sucesso/i.test(p.question))).toBe(true);
+    expect(probes.some(p => p.target === 'prd' && /métrica|meta|sucesso|número/i.test(p.question))).toBe(true);
   });
 
   it('não repete pergunta que já foi feita e respeita o limite de 4', () => {

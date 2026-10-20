@@ -136,22 +136,22 @@ const QUESTION_PLAN: { dimension: Dimension; category: LiveQuestionSuggestion['c
   {
     dimension: 'example', category: 'mom_test',
     reason: 'Mom Test: um fato do passado recente vale mais do que uma opinião.',
-    ask: title => `Pode me contar o último caso real de "${title}"? O que aconteceu, passo a passo?`
+    ask: title => `Pode me contar o último caso real de "${title}"? Quando foi, quem estava envolvido e o que você fez em seguida?`
   },
   {
     dimension: 'impact', category: 'quantification',
     reason: 'Sem um número aproximado de tempo, dinheiro ou retrabalho, não dá para saber se vale resolver.',
-    ask: title => `Qual o impacto de "${title}" em tempo, dinheiro ou retrabalho? Tem um número aproximado?`
+    ask: title => `Na última vez que "${title}" aconteceu, quanto tempo, dinheiro ou retrabalho isso custou? Pode dar um número, mesmo aproximado?`
   },
   {
     dimension: 'frequency', category: 'quantification',
     reason: 'A frequência mostra se é uma dor constante ou um caso raro.',
-    ask: title => `Qual a frequência de "${title}": acontece por dia, por semana ou por mês?`
+    ask: title => `Qual a frequência de "${title}"? Nas últimas quatro semanas, quantas vezes aconteceu?`
   },
   {
     dimension: 'alternative', category: 'jtbd',
     reason: 'O que a pessoa faz hoje revela o que realmente incomoda e o que ela aceita como solução.',
-    ask: title => `Como vocês resolvem "${title}" hoje? O que já tentaram?`
+    ask: title => `O que vocês fazem hoje quando "${title}" acontece? Descreva o passo a passo da última vez, incluindo as ferramentas usadas.`
   }
 ];
 

@@ -3,6 +3,7 @@ import { callAI, parseJsonLoose } from './aiClient';
 import { heuristicAnalysis, mockBacklogAndPRD } from './ai/heuristics';
 import { normalizeEpics, normalizeOkrs, normalizePrd } from './ai/normalizers';
 import { BACKLOG_SYSTEM_PROMPT, LIVE_ANALYSIS_SYSTEM_PROMPT } from './ai/prompts';
+import { filterQuestions } from './interviewQuestionService';
 import type { AnalysisResponse, BacklogResponse } from './ai/types';
 import type { JTBDItem, PainPoint } from '../types/discovery';
 
@@ -63,7 +64,8 @@ export const geminiService = {
       const parsed = parseJsonLoose(rawText);
       return {
         source: 'ai',
-        newQuestions: (parsed.newQuestions || []).map((q: any, i: number) => ({ ...q, id: 'gem-q-' + Date.now() + '-' + i })),
+        // Tira as perguntas subjetivas (hipotéticas, de opinião, indutivas) que a IA ainda assim devolver
+        newQuestions: filterQuestions((parsed.newQuestions || []).map((q: any, i: number) => ({ ...q, id: 'gem-q-' + Date.now() + '-' + i }))),
         newPainPoints: (parsed.newPainPoints || []).map((p: any, i: number) => ({ ...p, id: 'gem-p-' + Date.now() + '-' + i })),
         newJtbds: (parsed.newJtbds || []).map((j: any, i: number) => ({ ...j, id: 'gem-j-' + Date.now() + '-' + i })),
         newMindMapNodes: (parsed.newMindMapNodes || []).map((m: any, i: number) => ({

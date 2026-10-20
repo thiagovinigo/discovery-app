@@ -3,6 +3,7 @@ import type { AnalysisResponse } from './geminiService';
 import { syncJourney } from './journeyService';
 import { withMinutes } from './minutesService';
 import { syncMindMap } from './mindMapService';
+import { suggestFollowUps } from './interviewQuestionService';
 import { suggestTopicQuestions } from './topicService';
 import type { DiscoveryProject, MeetingSession, TranscriptSegment } from '../types/discovery';
 
@@ -65,9 +66,10 @@ function mergeAnalysis(session: MeetingSession, project: DiscoveryProject, analy
     userFlowSteps
   };
   // Perguntas pelo que a conversa ainda não respondeu, em cada assunto que ela já tem
+  // e perguntas de aprofundamento ancoradas no que o entrevistado acabou de dizer (as mais recentes primeiro)
   const withQuestions: MeetingSession = {
     ...merged,
-    liveQuestions: [...suggestTopicQuestions(merged), ...merged.liveQuestions]
+    liveQuestions: [...suggestFollowUps(merged), ...suggestTopicQuestions(merged), ...merged.liveQuestions]
   };
   const stakeholders = project.stakeholders ?? [];
   return syncJourney(syncMindMap(withQuestions, project.name, stakeholders), stakeholders);
