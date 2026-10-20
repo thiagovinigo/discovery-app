@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { exportService } from './exportService';
 import { INITIAL_MOCK_PROJECT } from './mockDataService';
-import type { DiscoveryProject } from '../types/discovery';
+import type { DiscoveryProject, UserStory } from '../types/discovery';
 
 const project: DiscoveryProject = INITIAL_MOCK_PROJECT;
 
@@ -13,6 +13,91 @@ function withQuotedEpicTitle(): DiscoveryProject {
   const [firstEpic, ...otherEpics] = project.epics;
   return { ...project, epics: [{ ...firstEpic, title: 'Épico "com aspas"' }, ...otherEpics] };
 }
+
+/** Cópia do projeto de exemplo em que a primeira história recebe os metadados informados. */
+function withFirstStory(meta: Partial<UserStory>): DiscoveryProject {
+  const [firstEpic, ...otherEpics] = project.epics;
+  const [firstFeature, ...otherFeatures] = firstEpic.features;
+  const [firstStory, ...otherStories] = firstFeature.userStories;
+  return {
+    ...project,
+    epics: [{ ...firstEpic, features: [{ ...firstFeature, userStories: [{ ...firstStory, ...meta }, ...otherStories] }, ...otherFeatures] }, ...otherEpics]
+  };
+}
+
+const firstStory = allStories[0];
+const validatedMeta: Partial<UserStory> = {
+  validation: {
+    status: 'validated',
+    evidences: [{ stance: 'confirms', quote: 'Preciso disso toda semana', sessionTitle: 'Kickoff', timestamp: '04:12', at: '2026-01-01T10:00:00.000Z' }]
+  }
+};
+const invalidatedMeta: Partial<UserStory> = { validation: { status: 'invalidated', evidences: [] } };
+
+describe('exports: validação, origem e itens invalidados (E8.8)', () => {
+  it('item validado leva o estado e a citação de origem em todos os formatos de backlog', () => {
+    const p = withFirstStory(validatedMeta);
+
+    for (const output of [
+      exportService.exportToJiraCsv(p),
+      exportService.exportToJiraJson(p),
+      exportService.exportToLinear(p),
+      exportService.exportToGitHubIssues(p).map(i => i.body).join('\n')
+    ]) {
+      expect(output).toContain('Validação: validado');
+      expect(output).toContain('Preciso disso toda semana');
+      expect(output).toContain('Kickoff, 04:12');
+    }
+  });
+
+  it('item fatiado e item criado pela IA dizem de onde vieram', () => {
+    const p = withFirstStory({ sliceOf: 's0', origin: { author: 'ai', createdAt: '2026-01-01T10:00:00.000Z' }, changes: [{ at: '2026-01-01T10:00:00.000Z', summary: 'Fatiada de "Original"' }] });
+
+    const linear = exportService.exportToLinear(p);
+
+    expect(linear).toContain('Fatiado: Fatiada de "Original"');
+    expect(linear).toContain('Origem: IA');
+  });
+
+  it('projeto sem metadados exporta como antes: nenhuma linha de rastreio', () => {
+    expect(exportService.exportToLinear(project)).not.toContain('Validação:');
+    expect(exportService.exportToJiraCsv(project)).not.toContain('Validação:');
+    expect(exportService.exportToGitHubIssues(project).some(i => i.body.includes('Rastreabilidade'))).toBe(false);
+  });
+
+  it('história invalidada fica de fora de todos os exports, mas as outras permanecem', () => {
+    const p = withFirstStory(invalidatedMeta);
+    const title = firstStory.title;
+
+    expect(exportService.exportToJiraCsv(p)).not.toContain(title);
+    expect(exportService.exportToJiraJson(p)).not.toContain(title);
+    expect(exportService.exportToLinear(p)).not.toContain(title);
+    expect(exportService.exportToGitHubIssues(p).some(i => i.title.includes(title))).toBe(false);
+    expect(exportService.exportToMarkdown(p)).not.toContain(title);
+    expect(exportService.exportToPRD(p)).not.toContain(title);
+    expect(exportService.exportToAISpec(p)).not.toContain(title);
+    expect(exportService.exportToGitHubIssues(p)).toHaveLength(allStories.length - 1);
+  });
+
+  it('com a opção de incluir invalidados, a história volta', () => {
+    const p = withFirstStory(invalidatedMeta);
+
+    expect(exportService.exportToJiraCsv(p, { includeInvalidated: true })).toContain(firstStory.title);
+    expect(exportService.exportToGitHubIssues(p, { includeInvalidated: true })).toHaveLength(allStories.length);
+  });
+
+  it('o rótulo do Linear reflete o estado real, e não marca tudo como validado', () => {
+    expect(exportService.exportToLinear(project)).toContain('discovery-hypothesis');
+    expect(exportService.exportToLinear(project)).not.toContain('discovery-validated');
+    expect(exportService.exportToLinear(withFirstStory(validatedMeta))).toContain('discovery-validated');
+  });
+
+  it('o Jira JSON leva o estado de validação nas etiquetas', () => {
+    const issues = JSON.parse(exportService.exportToJiraJson(withFirstStory(validatedMeta))).issues as { fields: { labels?: string[]; summary: string } }[];
+
+    expect(issues.find(i => i.fields.summary === firstStory.title)?.fields.labels).toContain('discovery-validated');
+  });
+});
 
 describe('exportService.exportToJiraCsv', () => {
   const lines = exportService.exportToJiraCsv(project).split('\n');

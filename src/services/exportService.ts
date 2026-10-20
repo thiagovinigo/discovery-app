@@ -1,7 +1,17 @@
 import { DiscoveryProject, MeetingSession } from '../types/discovery';
+import { validationOf } from './backlogItemService';
+import { traceLines, withoutInvalidated } from './exportTrace';
+import type { ExportOptions } from './exportTrace';
+
+/** Linhas de rastreabilidade (validação, evidência, fatiamento, origem) de um item, como texto de uma linha só. */
+const traceInline = (item: Parameters<typeof traceLines>[0]): string => {
+  const lines = traceLines(item);
+  return lines.length ? ` | ${lines.join(' | ')}` : '';
+};
 
 export const exportService = {
-  exportToJiraCsv(project: DiscoveryProject): string {
+  exportToJiraCsv(source: DiscoveryProject, options?: ExportOptions): string {
+    const project = withoutInvalidated(source, options);
     const headers = ['Issue Type', 'Summary', 'Description', 'Epic Link', 'Story Points', 'Priority', 'Acceptance Criteria'];
     const rows: string[][] = [];
 
@@ -35,7 +45,7 @@ export const exportService = {
           rows.push([
             'Story',
             `"${us.title.replace(/"/g, '""')}"`,
-            `"Como ${us.asA}, eu quero ${us.iWantTo}, para que ${us.soThat}"`,
+            `"Como ${us.asA}, eu quero ${us.iWantTo}, para que ${us.soThat}${traceInline(us).replace(/"/g, '""')}"`,
             `"${epic.title.replace(/"/g, '""')}"`,
             us.storyPoints ? us.storyPoints.toString() : '3',
             'Medium',
@@ -60,7 +70,8 @@ export const exportService = {
     return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
   },
 
-  exportToMarkdown(project: DiscoveryProject, activeSession?: MeetingSession): string {
+  exportToMarkdown(source: DiscoveryProject, activeSession?: MeetingSession, options?: ExportOptions): string {
+    const project = withoutInvalidated(source, options);
     let md = `# Discovery ao Done: ${project.name}\n\n`;
     md += `> **Descrição:** ${project.description}\n`;
     md += `> **Data de Atualização:** ${project.updatedAt}\n\n`;
@@ -152,7 +163,8 @@ export const exportService = {
     return JSON.stringify(project, null, 2);
   },
 
-  exportToGitHubIssues(project: DiscoveryProject): { title: string; body: string; labels: string[] }[] {
+  exportToGitHubIssues(source: DiscoveryProject, options?: ExportOptions): { title: string; body: string; labels: string[] }[] {
+    const project = withoutInvalidated(source, options);
     const issues: { title: string; body: string; labels: string[] }[] = [];
 
     project.epics.forEach(epic => {
@@ -184,6 +196,7 @@ export const exportService = {
             `* **Story Points:** ${us.storyPoints || 3}\n` +
             `* **Domínio:** ${us.domain || 'core'}\n` +
             evidenceSection +
+            (traceLines(us).length ? `\n## 🔎 Rastreabilidade\n${traceLines(us).map(line => `- ${line}`).join('\n')}\n` : '') +
             `\n## ✅ Critérios de Aceite (BDD)\n${acGherkin}\n\n` +
             (dorList ? `## 🚦 Definition of Ready (DoR)\n${dorList}\n\n` : '') +
             (dodList ? `## 🏁 Definition of Done (DoD)\n${dodList}\n\n` : '') +
@@ -204,7 +217,8 @@ export const exportService = {
     return issues;
   },
 
-  exportToLinear(project: DiscoveryProject): string {
+  exportToLinear(source: DiscoveryProject, options?: ExportOptions): string {
+    const project = withoutInvalidated(source, options);
     let output = `# Linear Backlog Import: ${project.name}\n\n`;
 
     project.epics.forEach(epic => {
@@ -216,7 +230,10 @@ export const exportService = {
           output += `### ${us.title}\n`;
           output += `- **Estimate:** ${us.storyPoints || 3} pts\n`;
           output += `- **Priority:** High\n`;
-          output += `- **Labels:** ${us.domain || 'core'}, discovery-validated\n`;
+          output += `- **Labels:** ${us.domain || 'core'}, discovery-${validationOf(us)}\n`;
+          traceLines(us).forEach(line => {
+            output += `- **Rastreio:** ${line}\n`;
+          });
           if (us.evidenceQuote) {
             output += `- **Discovery Quote:** "${us.evidenceQuote.text}" - ${us.evidenceQuote.speaker}\n`;
           }
@@ -234,7 +251,8 @@ export const exportService = {
     return output;
   },
 
-  exportToJiraJson(project: DiscoveryProject): string {
+  exportToJiraJson(source: DiscoveryProject, options?: ExportOptions): string {
+    const project = withoutInvalidated(source, options);
     const issues: any[] = [];
 
     project.epics.forEach(epic => {
@@ -254,10 +272,10 @@ export const exportService = {
             fields: {
               project: { key: 'DISC' },
               summary: us.title,
-              description: `As a ${us.asA}, I want to ${us.iWantTo}, so that ${us.soThat}.\n\n*Acceptance Criteria:*\n${ac}\n\n${us.evidenceQuote ? `*Discovery Evidence (${us.evidenceQuote.speaker}):* "${us.evidenceQuote.text}"` : ''}`,
+              description: `As a ${us.asA}, I want to ${us.iWantTo}, so that ${us.soThat}.\n\n*Acceptance Criteria:*\n${ac}\n\n${us.evidenceQuote ? `*Discovery Evidence (${us.evidenceQuote.speaker}):* "${us.evidenceQuote.text}"` : ''}${traceLines(us).length ? `\n\n*Rastreabilidade:*\n${traceLines(us).map(line => `- ${line}`).join('\n')}` : ''}`,
               issuetype: { name: 'Story' },
               customfield_10016: us.storyPoints || 3, // Jira Story Points standard ID
-              labels: [us.domain || 'core', 'discovery-ai']
+              labels: [us.domain || 'core', 'discovery-ai', `discovery-${validationOf(us)}`]
             }
           });
         });
@@ -267,7 +285,8 @@ export const exportService = {
     return JSON.stringify({ issues }, null, 2);
   },
 
-  exportToPRD(project: DiscoveryProject): string {
+  exportToPRD(source: DiscoveryProject, options?: ExportOptions): string {
+    const project = withoutInvalidated(source, options);
     const prd = project.prd;
     let md = `# PRD: ${prd.title || project.name}\n\n`;
     md += `> **Versão:** ${prd.version || '1.0.0 (Validado via Discovery)'} | **Status:** Aprovado para Engenharia | **Última Atualização:** ${prd.lastUpdated || project.updatedAt}\n\n`;
@@ -482,7 +501,8 @@ export const exportService = {
     return md;
   },
 
-  exportToAISpec(project: DiscoveryProject): string {
+  exportToAISpec(source: DiscoveryProject, options?: ExportOptions): string {
+    const project = withoutInvalidated(source, options);
     const prd = project.prd;
     let spec = `# SPEC.md — AI Autonomous Implementation Specification\n\n`;
     spec += `> **Project:** ${project.name}\n`;
