@@ -8,9 +8,16 @@ import {
 } from './types/discovery';
 import { storageService } from './services/storageService';
 import { geminiService } from './services/geminiService';
-import { appendSegment, appendSegments, applyLiveAnalysis, markQuestionAsked } from './services/sessionService';
+import {
+  appendSegment,
+  appendSegments,
+  applyLiveAnalysis,
+  getActiveSessionContext,
+  markQuestionAsked
+} from './services/sessionService';
 import { planBacklogMerge } from './services/backlogMerge';
 import { useProjects } from './state/useProjects';
+import { NoticeToast } from './components/NoticeToast';
 import { audioService, type AudioStatus } from './services/audioService';
 import { transcribeAudioWithWhisper } from './services/openAiClient';
 
@@ -89,7 +96,7 @@ export const App: React.FC = () => {
   }, []);
 
   // Fonte única do estado de projetos: a lista, e o projeto ativo derivado dela
-  const { projects, activeProject, refresh, select, create, importFromJson, remove, reset, saveProject, update } = useProjects({
+  const { projects, activeProject, ready, refresh, select, create, importFromJson, remove, clearAll, saveProject, update } = useProjects({
     onRestored: () => showNotice('info', 'Seus projetos foram recuperados da cópia de segurança do navegador.')
   });
 
@@ -121,9 +128,9 @@ export const App: React.FC = () => {
     speaker: 'Entrevistador (PM)' | 'Usuário / Stakeholder',
     text: string
   ) => {
-    const project = storageService.getActiveProject();
-    const session = project.sessions.find(s => s.id === project.activeSessionId) || project.sessions[0];
-    if (!session) return;
+    const context = getActiveSessionContext();
+    if (!context) return;
+    const { project, session } = context;
 
     const lowered = text.toLowerCase();
     const newSeg: TranscriptSegment = {
@@ -204,10 +211,9 @@ export const App: React.FC = () => {
   }, []);
 
   const handleMarkQuestionAsked = useCallback((questionId: string) => {
-    const project = storageService.getActiveProject();
-    const session = project.sessions.find(s => s.id === project.activeSessionId) || project.sessions[0];
-    if (!session) return;
-    const updated = markQuestionAsked(project.id, session.id, questionId);
+    const context = getActiveSessionContext();
+    if (!context) return;
+    const updated = markQuestionAsked(context.project.id, context.session.id, questionId);
     if (updated) refresh();
   }, [refresh]);
 
@@ -242,9 +248,7 @@ export const App: React.FC = () => {
         // Ctrl + M ou Alt + M: Marcar próxima pergunta do Prompter como feita
         if ((e.ctrlKey || e.altKey) && (e.key === 'm' || e.key === 'M')) {
           e.preventDefault();
-          const project = storageService.getActiveProject();
-          const sess = project.sessions.find(s => s.id === project.activeSessionId) || project.sessions[0];
-          const unasked = sess?.liveQuestions.find(q => !q.asked);
+          const unasked = getActiveSessionContext()?.session.liveQuestions.find(q => !q.asked);
           if (unasked) {
             handleMarkQuestionAsked(unasked.id);
             showNotice('success', 'Pergunta do Prompter marcada como realizada!');
@@ -258,7 +262,91 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeView, isRecording, handleStartRecording, handleStopRecording, handleMarkQuestionAsked, showNotice]);
 
-  if (!activeProject) return null;
+  // Handlers de projeto: ficam antes do retorno antecipado porque a tela vazia também os usa
+  const handleSelectProject = (projectId: string) => {
+    select(projectId);
+  };
+
+  const handleOpenProject = (projectId: string, targetView: AppView = 'project_hub') => {
+    handleSelectProject(projectId);
+    if (targetView === 'live_room') {
+      // Se já houver falas na sessão atual, ou se o usuário quiser nova reunião, deixamos preparado
+      const proj = storageService.getActiveProject();
+      const current = proj?.sessions.find(s => s.id === proj.activeSessionId) || proj?.sessions[0];
+      if (proj && current && current.rawTranscript.length > 0) {
+        // Cria nova sessão para nova reunião se a anterior já foi encerrada com falas
+        storageService.createNewSession(proj.id);
+        refresh();
+      }
+    }
+    setActiveView(targetView);
+  };
+
+  const handleCreateProject = (name: string, description: string) => {
+    const newProj = create(name, description);
+    setActiveView('project_hub');
+    showNotice('success', `Projeto "${newProj.name}" criado com sucesso!`);
+  };
+
+  const handleImportProjectJson = (jsonString: string) => {
+    try {
+      const imported = importFromJson(jsonString);
+      showNotice('success', `Projeto "${imported.name}" importado com sucesso!`);
+    } catch (err: any) {
+      showNotice('error', err?.message || 'Erro ao importar projeto.');
+    }
+  };
+
+  const handleDeleteProject = (projectId: string) => {
+    remove(projectId);
+    showNotice('info', 'Projeto excluído com sucesso.');
+  };
+
+  const handleClearAllProjects = () => {
+    clearAll();
+    setActiveView('projects');
+    showNotice('success', 'Todos os projetos foram apagados. Crie o seu para começar do zero.');
+  };
+
+  // Sem nenhum projeto: mostra só a tela inicial, para o usuário criar ou importar o primeiro
+  if (!activeProject) {
+    if (!ready) return null;
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <Header
+          project={null}
+          projects={projects}
+          onSelectProject={handleSelectProject}
+          onCreateProject={handleCreateProject}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onGoHome={() => setActiveView('projects')}
+          isRecording={false}
+          recordingDuration={0}
+        />
+        <main style={{ flex: 1, minWidth: 0, padding: '0 24px 32px 24px', maxWidth: '1440px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column' }}>
+          <ProjectsHomeView
+            projects={projects}
+            onOpenProject={handleOpenProject}
+            onCreateProject={handleCreateProject}
+            onImportProject={handleImportProjectJson}
+            onDeleteProject={handleDeleteProject}
+            onResetAllData={handleClearAllProjects}
+            onNavigateToKnowledge={(view) => setActiveView(view)}
+          />
+        </main>
+        <NoticeToast notice={notice} onDismiss={() => setNotice(null)} />
+        <ApiKeyModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          project={null}
+          onProjectImported={(imported) => {
+            refresh();
+            showNotice('success', `Projeto "${imported.name}" importado.`);
+          }}
+        />
+      </div>
+    );
+  }
 
   const currentSession: MeetingSession | undefined =
     activeProject.sessions.find(s => s.id === activeProject.activeSessionId) ||
@@ -309,55 +397,9 @@ export const App: React.FC = () => {
     refresh();
   };
 
-  // Handlers for Projects
-  const handleSelectProject = (projectId: string) => {
-    select(projectId);
-  };
-
-  const handleOpenProject = (projectId: string, targetView: AppView = 'project_hub') => {
-    handleSelectProject(projectId);
-    if (targetView === 'live_room') {
-      // Se já houver falas na sessão atual, ou se o usuário quiser nova reunião, deixamos preparado
-      const proj = storageService.getActiveProject();
-      const current = proj.sessions.find(s => s.id === proj.activeSessionId) || proj.sessions[0];
-      if (current && current.rawTranscript.length > 0) {
-        // Cria nova sessão para nova reunião se a anterior já foi encerrada com falas
-        storageService.createNewSession(proj.id);
-        refresh();
-      }
-    }
-    setActiveView(targetView);
-  };
-
   const handleStartFirstSession = () => {
     storageService.createNewSession(activeProject.id);
     refresh();
-  };
-
-  const handleCreateProject = (name: string, description: string) => {
-    const newProj = create(name, description);
-    setActiveView('project_hub');
-    showNotice('success', `Projeto "${newProj.name}" criado com sucesso!`);
-  };
-
-  const handleImportProjectJson = (jsonString: string) => {
-    try {
-      const imported = importFromJson(jsonString);
-      showNotice('success', `Projeto "${imported.name}" importado com sucesso!`);
-    } catch (err: any) {
-      showNotice('error', err?.message || 'Erro ao importar projeto.');
-    }
-  };
-
-  const handleDeleteProject = (projectId: string) => {
-    remove(projectId);
-    showNotice('info', 'Projeto excluído com sucesso.');
-  };
-
-  const handleResetForOfficialTests = () => {
-    reset();
-    setActiveView('projects');
-    showNotice('success', '🎉 Espaço 100% limpo e pronto para seus testes oficiais!');
   };
 
   const handleClearCurrentSessionTranscript = () => {
@@ -690,7 +732,7 @@ export const App: React.FC = () => {
             onCreateProject={handleCreateProject}
             onImportProject={handleImportProjectJson}
             onDeleteProject={handleDeleteProject}
-            onResetAllData={handleResetForOfficialTests}
+            onResetAllData={handleClearAllProjects}
             onNavigateToKnowledge={(view) => setActiveView(view)}
           />
         )}
@@ -976,29 +1018,7 @@ export const App: React.FC = () => {
       </div>
 
       {/* Notificações */}
-      {notice && (
-        <div
-          role="alert"
-          onClick={() => setNotice(null)}
-          style={{
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            maxWidth: '420px',
-            padding: '12px 16px',
-            borderRadius: '10px',
-            fontSize: '0.82rem',
-            cursor: 'pointer',
-            zIndex: 1100,
-            backdropFilter: 'blur(10px)',
-            background: notice.type === 'error' ? 'rgba(244, 63, 94, 0.2)' : notice.type === 'success' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(99, 102, 241, 0.2)',
-            border: `1px solid ${notice.type === 'error' ? 'rgba(244, 63, 94, 0.5)' : notice.type === 'success' ? 'rgba(16, 185, 129, 0.5)' : 'rgba(99, 102, 241, 0.5)'}`,
-            color: notice.type === 'error' ? '#fda4af' : notice.type === 'success' ? '#6ee7b7' : '#c7d2fe'
-          }}
-        >
-          {notice.text}
-        </div>
-      )}
+      <NoticeToast notice={notice} onDismiss={() => setNotice(null)} />
 
       {/* Settings Modal */}
       <ApiKeyModal

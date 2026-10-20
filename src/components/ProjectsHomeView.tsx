@@ -383,10 +383,14 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {onResetAllData && (
+            {onResetAllData && projects.length > 0 && (
               <button
                 type="button"
-                onClick={onResetAllData}
+                onClick={() => {
+                  if (window.confirm('Apagar TODOS os projetos deste navegador? Isso não pode ser desfeito. Exporte um backup em JSON antes, se precisar.')) {
+                    onResetAllData();
+                  }
+                }}
                 className="btn btn-secondary"
                 style={{
                   fontSize: '0.78rem',
@@ -395,10 +399,10 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
                   borderColor: 'rgba(244, 63, 94, 0.35)',
                   background: 'rgba(244, 63, 94, 0.08)'
                 }}
-                title="Limpar todos os projetos e reuniões de exemplo para iniciar seus testes oficiais com base 100% limpa"
+                title="Apaga todos os projetos e reuniões deste navegador, deixando o app vazio"
               >
                 <Trash2 size={14} />
-                Limpar Tudo para Teste Oficial
+                Apagar todos os projetos
               </button>
             )}
           </div>
@@ -409,10 +413,10 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
             <FolderOpen size={44} color="var(--accent-cyan)" style={{ margin: '0 auto 16px auto', opacity: 0.8 }} />
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '8px' }}>Nenhum projeto cadastrado</h3>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: '420px', margin: '0 auto 20px auto' }}>
-              Todos os dados foram limpos! Crie seu primeiro projeto oficial para começar a gravar entrevistas e gerar backlogs.
+              Comece criando o seu primeiro projeto: descreva o objetivo, cadastre as pessoas envolvidas, marque reuniões e monte o backlog a partir do que ouvir.
             </p>
             <button onClick={() => setCreating(true)} className="btn btn-primary" style={{ gap: '8px', margin: '0 auto' }}>
-              <Plus size={16} /> Criar Meu Primeiro Projeto Oficial
+              <Plus size={16} /> Criar Meu Primeiro Projeto
             </button>
           </div>
         ) : (

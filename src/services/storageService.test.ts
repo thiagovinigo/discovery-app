@@ -11,18 +11,41 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('storageService: projetos', () => {
-  it('semeia o projeto de exemplo quando o storage está vazio', () => {
-    const projects = storageService.getAllProjects();
-    expect(projects).toHaveLength(1);
-    expect(projects[0].id).toBe(INITIAL_MOCK_PROJECT.id);
+describe('storageService: começo limpo', () => {
+  it('não cria projeto de exemplo quando o storage está vazio', () => {
+    expect(storageService.getAllProjects()).toEqual([]);
+    expect(localStorage.getItem('discovery_done_projects_v1')).toBeNull();
   });
 
+  it('getActiveProject devolve null quando não há projetos', () => {
+    expect(storageService.getActiveProject()).toBeNull();
+  });
+
+  it('JSON corrompido dá lista vazia, sem projeto de exemplo', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    localStorage.setItem('discovery_done_projects_v1', '{corrompido');
+
+    expect(storageService.getAllProjects()).toEqual([]);
+  });
+
+  it('clearAllProjects apaga todos os projetos e o projeto ativo', () => {
+    storageService.createNewProject('A', '');
+    storageService.createNewProject('B', '');
+
+    storageService.clearAllProjects();
+
+    expect(storageService.getAllProjects()).toEqual([]);
+    expect(storageService.getActiveProjectId()).toBeNull();
+    expect(storageService.getActiveProject()).toBeNull();
+  });
+});
+
+describe('storageService: projetos', () => {
   it('cria um projeto novo, persiste e o torna o ativo', () => {
     const created = storageService.createNewProject('Projeto A', 'Descrição A');
 
     expect(created.sessions).toEqual([]);
-    expect(storageService.getActiveProject().id).toBe(created.id);
+    expect(storageService.getActiveProject()?.id).toBe(created.id);
     expect(storageService.getAllProjects().some(p => p.id === created.id)).toBe(true);
   });
 
@@ -32,16 +55,24 @@ describe('storageService: projetos', () => {
 
   it('exclui o projeto e ativa o primeiro restante', () => {
     const a = storageService.createNewProject('A', '');
+    const b = storageService.createNewProject('B', '');
     const remaining = storageService.deleteProject(a.id);
 
-    expect(remaining.some(p => p.id === a.id)).toBe(false);
-    expect(storageService.getActiveProject().id).toBe(remaining[0].id);
+    expect(remaining.map(p => p.id)).toEqual([b.id]);
+    expect(storageService.getActiveProject()?.id).toBe(b.id);
+  });
+
+  it('excluir o último projeto deixa o app vazio', () => {
+    const only = storageService.createNewProject('Único', '');
+
+    expect(storageService.deleteProject(only.id)).toEqual([]);
+    expect(storageService.getActiveProject()).toBeNull();
   });
 
   it('cai no primeiro projeto quando o id ativo não existe', () => {
-    storageService.getAllProjects();
+    storageService.saveAllProjects([INITIAL_MOCK_PROJECT]);
     storageService.setActiveProjectId('id-inexistente');
-    expect(storageService.getActiveProject().id).toBe(INITIAL_MOCK_PROJECT.id);
+    expect(storageService.getActiveProject()?.id).toBe(INITIAL_MOCK_PROJECT.id);
   });
 
   it('createNewSession adiciona a sessão no topo e a marca como ativa', () => {
@@ -49,8 +80,8 @@ describe('storageService: projetos', () => {
     const session = storageService.createNewSession(project.id, 'Entrevista 1');
 
     const reloaded = storageService.getActiveProject();
-    expect(reloaded.sessions[0].id).toBe(session.id);
-    expect(reloaded.activeSessionId).toBe(session.id);
+    expect(reloaded?.sessions[0].id).toBe(session.id);
+    expect(reloaded?.activeSessionId).toBe(session.id);
     expect(session.rawTranscript).toEqual([]);
   });
 
@@ -61,11 +92,6 @@ describe('storageService: projetos', () => {
     const reloaded = storageService.getAllProjects().find(p => p.id === project.id)!;
     expect(reloaded.name).toBe('Renomeado');
     expect(reloaded.updatedAt).not.toBe('2000-01-01T00:00:00.000Z');
-  });
-
-  it('devolve o projeto de exemplo quando o JSON salvo está corrompido', () => {
-    localStorage.setItem('discovery_done_projects_v1', '{corrompido');
-    expect(storageService.getAllProjects()[0].id).toBe(INITIAL_MOCK_PROJECT.id);
   });
 });
 
@@ -99,6 +125,7 @@ describe('storageService: chaves de API', () => {
 
 describe('storageService: backup JSON (exportar e reimportar)', () => {
   it('reimporta o conteúdo; só id, nome e updatedAt mudam', () => {
+    storageService.saveAllProjects([INITIAL_MOCK_PROJECT]);
     const original = storageService.getAllProjects()[0];
     const json = exportService.exportToJson(original);
 
@@ -114,7 +141,7 @@ describe('storageService: backup JSON (exportar e reimportar)', () => {
   it('o projeto importado vira o ativo e entra no topo da lista', () => {
     const imported = storageService.importProject(exportService.exportToJson(INITIAL_MOCK_PROJECT));
 
-    expect(storageService.getActiveProject().id).toBe(imported.id);
+    expect(storageService.getActiveProject()?.id).toBe(imported.id);
     expect(storageService.getAllProjects()[0].id).toBe(imported.id);
   });
 
@@ -147,7 +174,7 @@ describe('storageService: operações sobre o projeto ativo', () => {
       createdAt: '2026-01-01',
     } as never);
 
-    expect(storageService.getActiveProject().bugReports?.[0].id).toBe(bug.id);
+    expect(storageService.getActiveProject()?.bugReports?.[0].id).toBe(bug.id);
   });
 
   it('addBugReport respeita o projectId recebido, não o projeto ativo (E3.2)', () => {
@@ -177,14 +204,14 @@ describe('storageService: operações sobre o projeto ativo', () => {
     const all = storageService.getAllProjects();
     expect(all.find(p => p.id === a.id)!.sessions[0].id).toBe(session.id);
     expect(all.find(p => p.id === b.id)!.sessions).toHaveLength(0);
-    expect(storageService.getActiveProject().id).toBe(b.id);
+    expect(storageService.getActiveProject()?.id).toBe(b.id);
   });
 
   it('updateStoryChecklists respeita o projectId (E3.2)', () => {
     const epic = INITIAL_MOCK_PROJECT.epics[0];
     const feature = epic.features[0];
     const story = feature.userStories[0];
-    storageService.getAllProjects();
+    storageService.saveAllProjects([INITIAL_MOCK_PROJECT]);
     const other = storageService.createNewProject('Outro', ''); // fica ativo
 
     storageService.updateStoryChecklists(INITIAL_MOCK_PROJECT.id, epic.id, feature.id, story.id, [], []);
@@ -223,31 +250,20 @@ describe('storageService: operações sobre o projeto ativo', () => {
     const dor = [{ id: 'c1', label: 'Pronto', checked: true }] as never;
     const dod = [{ id: 'c2', label: 'Feito', checked: false }] as never;
 
-    storageService.getAllProjects();
+    storageService.saveAllProjects([INITIAL_MOCK_PROJECT]);
     storageService.updateStoryChecklists(INITIAL_MOCK_PROJECT.id, epic.id, feature.id, story.id, dor, dod);
 
-    const saved = storageService.getActiveProject().epics[0].features[0].userStories[0];
-    expect(saved.dorChecklist).toEqual(dor);
-    expect(saved.dodChecklist).toEqual(dod);
+    const saved = storageService.getActiveProject()?.epics[0].features[0].userStories[0];
+    expect(saved?.dorChecklist).toEqual(dor);
+    expect(saved?.dodChecklist).toEqual(dod);
   });
 
   it('updateStoryChecklists ignora ids que não existem, sem lançar erro', () => {
-    storageService.getAllProjects();
     expect(() => storageService.updateStoryChecklists('p', 'e-x', 'f-x', 's-x', [], [])).not.toThrow();
   });
 });
 
-describe('storageService: reset, modelos e persistência', () => {
-  it('resetForOfficialTests deixa um único projeto limpo, com uma sessão vazia e ativa', () => {
-    const clean = storageService.resetForOfficialTests('Meu Projeto', 'Desc');
-
-    expect(storageService.getAllProjects()).toHaveLength(1);
-    expect(clean.name).toBe('Meu Projeto');
-    expect(clean.sessions).toHaveLength(1);
-    expect(clean.activeSessionId).toBe(clean.sessions[0].id);
-    expect(clean.epics).toEqual([]);
-  });
-
+describe('storageService: modelos e persistência', () => {
   it('guarda o modelo separadamente para cada provider', () => {
     storageService.setAiProvider('openai');
     storageService.setModel('gpt-4o');

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useProjects } from './useProjects';
 import { storageService } from '../services/storageService';
+import { INITIAL_MOCK_PROJECT } from '../services/mockDataService';
 import { appendSegment } from '../services/sessionService';
 import type { TranscriptSegment } from '../types/discovery';
 
@@ -9,7 +10,9 @@ const segment = (id: string): TranscriptSegment => ({
   id, speaker: 'Usuário / Stakeholder', text: id, timestamp: '00:00', isFinal: true,
 });
 
+/** Monta o hook com um projeto já salvo; os testes de "começo limpo" usam renderHook direto, sem isso. */
 async function setup(options?: Parameters<typeof useProjects>[0]) {
+  storageService.saveAllProjects([INITIAL_MOCK_PROJECT]);
   const hook = renderHook(() => useProjects(options));
   await waitFor(() => expect(hook.result.current.ready).toBe(true));
   return hook;
@@ -49,6 +52,27 @@ describe('useProjects: carga inicial', () => {
   });
 });
 
+describe('useProjects: começo limpo', () => {
+  it('sem nenhum projeto salvo, fica pronto com lista vazia e sem projeto ativo', async () => {
+    const hook = renderHook(() => useProjects());
+    await waitFor(() => expect(hook.result.current.ready).toBe(true));
+
+    expect(hook.result.current.projects).toEqual([]);
+    expect(hook.result.current.activeProject).toBeNull();
+  });
+
+  it('clearAll apaga tudo e volta ao estado vazio', async () => {
+    const { result } = await setup();
+    act(() => { result.current.create('Algum', ''); });
+    expect(result.current.projects.length).toBeGreaterThan(0);
+
+    act(() => result.current.clearAll());
+
+    expect(result.current.projects).toEqual([]);
+    expect(result.current.activeProject).toBeNull();
+  });
+});
+
 describe('useProjects: operações', () => {
   it('select troca o projeto ativo', async () => {
     const { result } = await setup();
@@ -59,7 +83,7 @@ describe('useProjects: operações', () => {
     act(() => result.current.select(first.id));
 
     expect(result.current.activeProject!.id).toBe(first.id);
-    expect(storageService.getActiveProject().id).toBe(first.id);
+    expect(storageService.getActiveProject()?.id).toBe(first.id);
   });
 
   it('create adiciona o projeto, o ativa e persiste', async () => {
@@ -80,7 +104,7 @@ describe('useProjects: operações', () => {
     act(() => result.current.saveProject({ ...active, name: 'Renomeado' }));
 
     expect(result.current.activeProject!.name).toBe('Renomeado');
-    expect(storageService.getActiveProject().name).toBe('Renomeado');
+    expect(storageService.getActiveProject()?.name).toBe('Renomeado');
   });
 
   it('update altera um projeto que não é o ativo, sem trocar o ativo', async () => {
@@ -117,15 +141,6 @@ describe('useProjects: operações', () => {
     expect(result.current.projects).toContain(result.current.activeProject);
   });
 
-  it('reset deixa um único projeto limpo e ativo', async () => {
-    const { result } = await setup();
-
-    let cleanId = '';
-    act(() => { cleanId = result.current.reset().id; });
-
-    expect(result.current.projects).toHaveLength(1);
-    expect(result.current.activeProject!.id).toBe(cleanId);
-  });
 });
 
 describe('useProjects: importação de JSON', () => {

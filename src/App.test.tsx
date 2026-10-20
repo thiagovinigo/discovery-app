@@ -1,0 +1,43 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { App } from './App';
+import { storageService } from './services/storageService';
+
+beforeEach(() => {
+  localStorage.clear();
+});
+
+afterEach(() => {
+  cleanup();
+});
+
+describe('App: começo limpo', () => {
+  it('sem nenhum projeto, mostra a tela inicial com o convite para criar o primeiro (não fica em branco)', async () => {
+    render(<App />);
+
+    expect(await screen.findByText('Nenhum projeto cadastrado')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Criar Meu Primeiro Projeto/ })).toBeTruthy();
+  });
+
+  it('não traz projeto de exemplo nem oferece apagar tudo quando está vazio', async () => {
+    render(<App />);
+    await screen.findByText('Nenhum projeto cadastrado');
+
+    expect(screen.queryByText(/Plataforma de Liquidação/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Apagar todos os projetos/ })).toBeNull();
+    expect(storageService.getAllProjects()).toEqual([]);
+  });
+
+  it('criar o primeiro projeto entra nele e o persiste', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Criar Meu Primeiro Projeto/ }));
+
+    fireEvent.change(screen.getByPlaceholderText(/Conciliação Automática PIX/), { target: { value: 'Meu produto' } });
+    fireEvent.click(screen.getByRole('button', { name: /Criar e Começar Trabalho/ }));
+
+    await waitFor(() => expect(storageService.getAllProjects()).toHaveLength(1));
+    expect(storageService.getAllProjects()[0].name).toBe('Meu produto');
+    expect((await screen.findAllByText(/Meu produto/)).length).toBeGreaterThan(0);
+    expect(screen.queryByText('Nenhum projeto cadastrado')).toBeNull();
+  });
+});

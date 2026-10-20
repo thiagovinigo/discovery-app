@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { storageService } from './storageService';
-import { applyLiveAnalysis, appendSegment, appendSegments, markQuestionAsked } from './sessionService';
+import { applyLiveAnalysis, appendSegment, appendSegments, getActiveSessionContext, markQuestionAsked } from './sessionService';
 import type { AnalysisResponse } from './geminiService';
 import type { TranscriptSegment } from '../types/discovery';
 
@@ -72,6 +72,36 @@ describe('appendSegment', () => {
 
     const otherSaved = storageService.getAllProjects().find(p => p.id === projectId)!.sessions.find(s => s.id === other.id)!;
     expect(otherSaved.rawTranscript).toEqual([]);
+  });
+});
+
+describe('getActiveSessionContext', () => {
+  it('devolve o projeto ativo e a sessão marcada como ativa', () => {
+    const other = storageService.createNewSession(projectId, 'Outra'); // vira a ativa
+
+    const context = getActiveSessionContext();
+
+    expect(context?.project.id).toBe(projectId);
+    expect(context?.session.id).toBe(other.id);
+  });
+
+  it('sem sessão ativa marcada, cai na primeira sessão do projeto', () => {
+    storageService.updateProject(projectId, p => ({ ...p, activeSessionId: undefined }));
+
+    expect(getActiveSessionContext()?.session.id).toBe(sessionId);
+  });
+
+  it('devolve null quando o projeto ativo não tem sessões', () => {
+    const empty = storageService.createNewProject('Sem sessões', '');
+
+    expect(getActiveSessionContext()).toBeNull();
+    expect(storageService.getActiveProject()?.id).toBe(empty.id);
+  });
+
+  it('devolve null quando não há nenhum projeto', () => {
+    storageService.clearAllProjects();
+
+    expect(getActiveSessionContext()).toBeNull();
   });
 });
 

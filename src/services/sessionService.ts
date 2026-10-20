@@ -75,6 +75,17 @@ function mergeAnalysis(session: MeetingSession, projectName: string, analysis: A
   };
 }
 
+/**
+ * Projeto ativo e a sessão em andamento dele, lidos do storage. Quando nenhuma sessão está marcada como ativa,
+ * vale a primeira. Devolve `null` se não há projeto ou se o projeto ainda não tem sessões.
+ */
+export function getActiveSessionContext(): { project: DiscoveryProject; session: MeetingSession } | null {
+  const project = storageService.getActiveProject();
+  if (!project) return null;
+  const session = project.sessions.find(s => s.id === project.activeSessionId) || project.sessions[0];
+  return session ? { project, session } : null;
+}
+
 /** Acrescenta várias falas, em ordem, ao fim da transcrição da sessão e persiste. */
 export function appendSegments(
   projectId: string,

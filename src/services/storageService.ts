@@ -1,5 +1,4 @@
 import { DiscoveryProject, MeetingSession } from '../types/discovery';
-import { INITIAL_MOCK_PROJECT } from './mockDataService';
 
 const STORAGE_KEY_PROJECTS = 'discovery_done_projects_v1';
 const STORAGE_KEY_ACTIVE_PROJECT_ID = 'discovery_done_active_project_id_v1';
@@ -105,30 +104,18 @@ export const storageService = {
   getAllProjects(): DiscoveryProject[] {
     try {
       const data = quotaFallback ? JSON.stringify(quotaFallback) : localStorage.getItem(STORAGE_KEY_PROJECTS);
-      if (!data) {
-        const initial = [INITIAL_MOCK_PROJECT];
-        this.saveAllProjects(initial);
-        return initial;
-      }
+      // Começa vazio: o app não cria projeto de exemplo sozinho
+      if (!data) return [];
       const parsed: DiscoveryProject[] = JSON.parse(data);
-      // Backfill personas, bugReports, and mock enrichments if missing
-      return parsed.map(p => {
-        const withExtras = { ...p };
-        if (!withExtras.personas || withExtras.personas.length === 0) {
-          withExtras.personas = p.id === 'proj-1' ? INITIAL_MOCK_PROJECT.personas : [];
-        }
-        if (!withExtras.bugReports || withExtras.bugReports.length === 0) {
-          withExtras.bugReports = p.id === 'proj-1' ? INITIAL_MOCK_PROJECT.bugReports : [];
-        }
-        // If proj-1 is missing evidenceQuote, merge from mock
-        if (p.id === 'proj-1' && withExtras.epics?.[0]?.features?.[0]?.userStories?.[0] && !withExtras.epics[0].features[0].userStories[0].evidenceQuote) {
-          withExtras.epics = INITIAL_MOCK_PROJECT.epics;
-        }
-        return withExtras;
-      });
+      // Projetos salvos por versões antigas podem não ter estes campos
+      return parsed.map(p => ({
+        ...p,
+        personas: p.personas ?? [],
+        bugReports: p.bugReports ?? []
+      }));
     } catch (e) {
       console.error('Erro ao ler projetos do storage:', e);
-      return [INITIAL_MOCK_PROJECT];
+      return [];
     }
   },
 
@@ -143,12 +130,19 @@ export const storageService = {
     void this.mirrorToIndexedDb(projects);
   },
 
-  getActiveProject(): DiscoveryProject {
+  /** Projeto ativo; se o id salvo não existe mais, o primeiro; `null` se não há nenhum projeto. */
+  getActiveProject(): DiscoveryProject | null {
     const projects = this.getAllProjects();
     const activeId = localStorage.getItem(STORAGE_KEY_ACTIVE_PROJECT_ID);
-    const found = projects.find(p => p.id === activeId);
-    if (found) return found;
-    return projects[0] || INITIAL_MOCK_PROJECT;
+    return projects.find(p => p.id === activeId) ?? projects[0] ?? null;
+  },
+
+  /** Apaga todos os projetos (no localStorage e no espelho do IndexedDB) e o projeto ativo. */
+  clearAllProjects(): void {
+    localStorage.removeItem(STORAGE_KEY_PROJECTS);
+    localStorage.removeItem(STORAGE_KEY_ACTIVE_PROJECT_ID);
+    quotaFallback = null;
+    void this.mirrorToIndexedDb([]);
   },
 
   /** Id guardado como ativo, sem checar se o projeto ainda existe. */
@@ -257,87 +251,6 @@ export const storageService = {
       localStorage.removeItem(STORAGE_KEY_ACTIVE_PROJECT_ID);
     }
     return projects;
-  },
-
-  resetForOfficialTests(initialName?: string, initialDesc?: string): DiscoveryProject {
-    const projectName = initialName || 'Meu Projeto Oficial de Discovery';
-    const projectDesc = initialDesc || 'Ambiente limpo pronto para conduzir entrevistas reais, capturar áudio com Whisper e gerar PRD.';
-    const cleanProject: DiscoveryProject = {
-      id: newId('proj'),
-      name: projectName,
-      description: projectDesc,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      sessions: [
-        {
-          id: 'sess-1',
-          title: 'Sessão #1 - Entrevista Inicial de Discovery',
-          date: new Date().toLocaleDateString('pt-BR'),
-          durationSeconds: 0,
-          participants: ['Entrevistador (PM)', 'Cliente / Stakeholder'],
-          rawTranscript: [],
-          summary: {
-            tldr: 'Sessão limpa aguardando gravação ou importação de áudio.',
-            mainTakeaways: [],
-            actionItems: [],
-            goldenQuotes: []
-          },
-          liveQuestions: [],
-          painPoints: [],
-          jtbds: [],
-          mindMapNodes: [
-            {
-              id: 'node-root',
-              label: projectName,
-              type: 'root',
-              x: 400,
-              y: 250,
-              color: '#6366f1'
-            }
-          ],
-          mindMapEdges: [],
-          userFlowSteps: []
-        }
-      ],
-      okrs: [],
-      epics: [],
-      prd: {
-        id: newId('prd'),
-        title: `PRD: ${projectName}`,
-        version: '0.1.0 (Rascunho Inicial)',
-        lastUpdated: new Date().toLocaleDateString('pt-BR'),
-        problemStatement: 'Descreva o problema validado com os clientes.',
-        targetAudience: 'Público-alvo / Personas da solução.',
-        valueProposition: 'Proposta única de valor.',
-        inScope: [],
-        outOfScope: [],
-        successMetrics: [],
-        assumptions: [],
-        risksAndMitigations: []
-      },
-      leanCanvas: {
-        problem: [],
-        existingAlternatives: [],
-        customerSegments: [],
-        earlyAdopters: [],
-        uniqueValueProposition: '',
-        highLevelConcept: '',
-        solution: [],
-        channels: [],
-        revenueStreams: [],
-        costStructure: [],
-        keyMetrics: [],
-        unfairAdvantage: ''
-      },
-      decisionLog: [],
-      personas: [],
-      bugReports: []
-    };
-
-    cleanProject.activeSessionId = cleanProject.sessions[0].id;
-    this.saveAllProjects([cleanProject]);
-    this.setActiveProjectId(cleanProject.id);
-    return cleanProject;
   },
 
   /**

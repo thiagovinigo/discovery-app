@@ -75,10 +75,10 @@ export function useProjects(options: UseProjectsOptions = {}) {
     refresh();
   }, [refresh]);
 
-  const reset = useCallback((): DiscoveryProject => {
-    const clean = storageService.resetForOfficialTests();
+  /** Apaga todos os projetos, deixando o app vazio. */
+  const clearAll = useCallback(() => {
+    storageService.clearAllProjects();
     refresh();
-    return clean;
   }, [refresh]);
 
   /** Grava o projeto inteiro (substitui o de mesmo id). */
@@ -108,7 +108,7 @@ export function useProjects(options: UseProjectsOptions = {}) {
     create,
     importFromJson,
     remove,
-    reset,
+    clearAll,
     saveProject,
     update
   };
