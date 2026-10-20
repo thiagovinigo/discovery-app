@@ -5,10 +5,54 @@ import { storageService } from './services/storageService';
 
 beforeEach(() => {
   localStorage.clear();
+  window.history.replaceState(null, '', '/');
 });
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, '', '/');
+});
+
+describe('App: a tela fica na URL', () => {
+  const createProject = async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Criar Meu Primeiro Projeto/ }));
+    fireEvent.change(screen.getByLabelText(/Nome do Projeto/), { target: { value: 'Meu produto' } });
+    fireEvent.click(screen.getByRole('button', { name: /Criar e Começar Trabalho/ }));
+  };
+
+  it('ir para uma tela muda o hash da URL', async () => {
+    await createProject();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Anotações/ }));
+
+    expect(window.location.hash).toBe('#/notes');
+    expect(await screen.findByLabelText('Nova anotação')).toBeTruthy();
+  });
+
+  it('abrir um link com o hash de uma tela cai direto nela', async () => {
+    await createProject();
+    await screen.findByRole('button', { name: /Anotações/ });
+    cleanup();
+    window.history.replaceState(null, '', '/#/agenda');
+
+    render(<App />);
+
+    expect(await screen.findByLabelText('Título da reunião')).toBeTruthy();
+  });
+
+  it('o botão voltar do navegador volta para a tela anterior', async () => {
+    await createProject();
+    fireEvent.click(await screen.findByRole('button', { name: /Anotações/ }));
+    await screen.findByLabelText('Nova anotação');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Agenda de Reuniões/ }));
+    await screen.findByLabelText('Título da reunião');
+
+    window.location.hash = '#/notes';
+
+    expect(await screen.findByLabelText('Nova anotação')).toBeTruthy();
+  });
 });
 
 describe('App: começo limpo', () => {

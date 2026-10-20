@@ -21,6 +21,7 @@ import { NoticeToast } from './components/NoticeToast';
 import { StakeholdersView } from './components/StakeholdersView';
 import { InterviewView } from './components/InterviewView';
 import { createProjectActions } from './state/projectActions';
+import { useHashView } from './state/useHashView';
 import { NotesView } from './components/NotesView';
 import { BacklogHealthPanel } from './components/BacklogHealthPanel';
 import { BacklogReviewPanel } from './components/BacklogReviewPanel';
@@ -80,7 +81,7 @@ import {
 } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const [activeView, setActiveView] = useState<AppView>('projects');
+  const [activeView, setActiveView] = useHashView();
   const [activeRightTab, setActiveRightTab] = useState<'mindmap' | 'userflow'>('mindmap');
 
   const [isRecording, setIsRecording] = useState(false);
