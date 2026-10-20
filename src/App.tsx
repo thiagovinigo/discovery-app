@@ -25,6 +25,7 @@ import { NotesView } from './components/NotesView';
 import { BacklogHealthPanel } from './components/BacklogHealthPanel';
 import { BacklogReviewPanel } from './components/BacklogReviewPanel';
 import { EvidencePanel } from './components/EvidencePanel';
+import { changeWithSnapshot, lastSnapshot, undoLast } from './services/backlogHistoryService';
 import { applyEvidence, suggestEvidence } from './services/evidenceService';
 import type { EvidenceSuggestion } from './services/evidenceService';
 import { applyProposals, planBacklogProposals } from './services/backlogProposals';
@@ -707,6 +708,13 @@ export const App: React.FC = () => {
     saveProject(updatedProj);
   };
 
+  const handleUndoBacklog = () => {
+    const snapshot = lastSnapshot(activeProject);
+    if (!snapshot) return;
+    update(activeProject.id, p => undoLast(p).project);
+    showNotice('info', `Desfeito: ${snapshot.label}.`);
+  };
+
   const handleFindEvidence = () => {
     const suggestions = suggestEvidence(activeProject);
     if (suggestions.length === 0) {
@@ -720,7 +728,10 @@ export const App: React.FC = () => {
   const handleApplyEvidence = (acceptedIds: string[]) => {
     if (!pendingEvidence) return;
     const { suggestions } = pendingEvidence;
-    update(activeProject.id, p => ({ ...p, epics: applyEvidence(p.epics, suggestions, acceptedIds, new Date().toISOString()) }));
+    const at = new Date().toISOString();
+    update(activeProject.id, p =>
+      changeWithSnapshot(p, `Registrou ${acceptedIds.length} evidência(s) de reunião`, at, q => ({ ...q, epics: applyEvidence(q.epics, suggestions, acceptedIds, at) }))
+    );
     setPendingEvidence(null);
     showNotice('success', `${acceptedIds.length} evidência(s) registrada(s) no backlog.`);
   };
@@ -728,10 +739,13 @@ export const App: React.FC = () => {
   const handleApplyReview = (acceptedIds: string[]) => {
     if (!pendingReview) return;
     const { proposals, sessionId } = pendingReview;
-    update(activeProject.id, p => {
-      const next = applyProposals({ okrs: p.okrs, epics: p.epics, prd: p.prd }, proposals, acceptedIds, { at: new Date().toISOString(), sessionId });
-      return { ...p, okrs: next.okrs, epics: next.epics };
-    });
+    const at = new Date().toISOString();
+    update(activeProject.id, p =>
+      changeWithSnapshot(p, `Aplicou ${acceptedIds.length} proposta(s) da IA`, at, q => {
+        const next = applyProposals({ okrs: q.okrs, epics: q.epics, prd: q.prd }, proposals, acceptedIds, { at, sessionId });
+        return { ...q, okrs: next.okrs, epics: next.epics };
+      })
+    );
     setPendingReview(null);
     showNotice('success', `${acceptedIds.length} de ${proposals.length} proposta(s) aplicada(s) ao backlog.`);
   };
@@ -1168,7 +1182,12 @@ export const App: React.FC = () => {
               onDiscard={() => setPendingEvidence(null)}
             />
           )}
-          <BacklogHealthPanel epics={activeProject.epics} onFindEvidence={handleFindEvidence} />
+          <BacklogHealthPanel
+            epics={activeProject.epics}
+            onFindEvidence={handleFindEvidence}
+            undoLabel={lastSnapshot(activeProject)?.label}
+            onUndo={handleUndoBacklog}
+          />
           <DiscoveryToDoneView
             okrs={activeProject.okrs}
             epics={activeProject.epics}

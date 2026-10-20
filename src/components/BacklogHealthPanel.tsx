@@ -8,12 +8,15 @@ interface BacklogHealthPanelProps {
   epics: Epic[];
   /** Procura nas reuniões falas que confirmam ou contestam itens do backlog. */
   onFindEvidence?: () => void;
+  /** O que a última mudança do backlog fez; o botão de desfazer só aparece com isto e com `onUndo`. */
+  undoLabel?: string;
+  onUndo?: () => void;
 }
 
 const cardStyle: React.CSSProperties = { padding: '8px 12px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.7)', border: '1px solid var(--border-subtle)' };
 
 /** No backlog: quanto dele já foi validado em reunião e quanto está pronto para dev, com as lacunas à vista. */
-export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, onFindEvidence }) => {
+export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, onFindEvidence, undoLabel, onUndo }) => {
   const validation = useMemo(() => validationSummary(epics), [epics]);
   const verification = useMemo(() => verifyBacklog(epics), [epics]);
   const contested = useMemo(() => contestedItems(epics), [epics]);
@@ -43,11 +46,18 @@ export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, o
         ))}
       </div>
 
-      {onFindEvidence && (
-        <div>
-          <button type="button" className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '0.78rem' }} onClick={onFindEvidence}>
-            Buscar evidências nas reuniões
-          </button>
+      {(onFindEvidence || (onUndo && undoLabel)) && (
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          {onFindEvidence && (
+            <button type="button" className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '0.78rem' }} onClick={onFindEvidence}>
+              Buscar evidências nas reuniões
+            </button>
+          )}
+          {onUndo && undoLabel && (
+            <button type="button" className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '0.78rem' }} onClick={onUndo}>
+              {`Desfazer: ${undoLabel}`}
+            </button>
+          )}
         </div>
       )}
 

@@ -218,6 +218,17 @@ export interface LeanCanvas {
   unfairAdvantage: string;
 }
 
+/** Cópia do backlog tirada antes de uma mudança grande (revisão, evidência, mescla, fatiamento), para poder desfazer. */
+export interface BacklogSnapshot {
+  id: string;
+  /** ISO-8601. */
+  at: string;
+  /** O que a mudança fez, para o botão de desfazer dizer o que desfaz. */
+  label: string;
+  okrs: OKR[];
+  epics: Epic[];
+}
+
 export interface DecisionLogEntry {
   id: string;
   date: string;
@@ -403,4 +414,6 @@ export interface DiscoveryProject {
   notes?: ProjectNote[];
   scheduledMeetings?: ScheduledMeeting[];
   interview?: InterviewState;
+  /** Mais recente primeiro. */
+  backlogHistory?: BacklogSnapshot[];
 }

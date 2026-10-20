@@ -73,6 +73,18 @@ describe('BacklogHealthPanel', () => {
     expect(screen.queryByRole('button', { name: 'Buscar evidências nas reuniões' })).toBeNull();
   });
 
+  it('mostra o que o desfazer desfaz, e só quando há algo a desfazer', () => {
+    const onUndo = vi.fn();
+    render(<BacklogHealthPanel epics={[epicWith([story()])]} undoLabel="Aplicou 3 propostas da IA" onUndo={onUndo} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Desfazer: Aplicou 3 propostas da IA' }));
+    expect(onUndo).toHaveBeenCalled();
+
+    cleanup();
+    render(<BacklogHealthPanel epics={[epicWith([story()])]} onUndo={onUndo} />);
+    expect(screen.queryByRole('button', { name: /Desfazer/ })).toBeNull();
+  });
+
   it('sem itens contestados nem lacunas, não mostra essas listas', () => {
     render(<BacklogHealthPanel epics={[epicWith([story()])]} />);
 
