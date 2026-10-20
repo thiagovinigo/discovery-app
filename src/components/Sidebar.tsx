@@ -66,17 +66,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const groups: { step: string; title: string; items: Item[] }[] = [
     {
       step: 'ETAPA 1',
-      title: 'Setup & Visão Geral',
+      title: 'Visão',
       items: [
         { id: 'project_hub', label: 'Hub do Projeto (Visão)', icon: <Rocket size={16} />, highlight: true },
         { id: 'stakeholders', label: 'Stakeholders', icon: <Users size={16} />, badge: stakeholderCount > 0 ? `${stakeholderCount}` : undefined },
-        { id: 'notes', label: 'Anotações', icon: <NotebookPen size={16} />, badge: noteCount > 0 ? `${noteCount}` : undefined },
-        { id: 'brain_dashboard', label: 'Segundo Cérebro (C.O.D.E.)', icon: <Brain size={16} /> }
+        { id: 'notes', label: 'Anotações', icon: <NotebookPen size={16} />, badge: noteCount > 0 ? `${noteCount}` : undefined }
       ]
     },
     {
       step: 'ETAPA 2',
-      title: 'Gravações & Discovery',
+      title: 'Captura',
       items: [
         { id: 'agenda', label: 'Agenda de Reuniões', icon: <CalendarClock size={16} />, badge: upcomingMeetingCount > 0 ? `${upcomingMeetingCount}` : undefined },
         { id: 'live_room', label: 'Gravação & Sala ao Vivo', icon: <Radio size={16} />, badge: transcriptCount > 0 ? `${transcriptCount}` : undefined },
@@ -85,27 +84,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       step: 'ETAPA 3',
-      title: 'Backlog & Refinamento',
+      title: 'Análise',
       items: [
-        { id: 'backlog', label: 'Backlog & Histórias BDD', icon: <Zap size={16} />, badge: epicCount > 0 ? `${epicCount}` : undefined },
-        { id: 'refine', label: 'Fatiar & Refinar (SPIDR)', icon: <Scissors size={16} /> },
-        { id: 'documentation', label: 'PRD Vivo & SPEC.md (IA)', icon: <FileText size={16} /> }
-      ]
-    },
-    {
-      step: 'ETAPA 4',
-      title: 'Copiloto de IA & PO',
-      items: [
-        { id: 'interview', label: 'Copiloto me entrevista', icon: <MessageCircle size={16} /> },
-        { id: 'po_space', label: 'Espaço do PO (IA Copilot)', icon: <Sparkles size={16} /> },
+        { id: 'brain_dashboard', label: 'Segundo Cérebro (C.O.D.E.)', icon: <Brain size={16} /> },
         { id: 'product_audit', label: 'Banca Validadora PM/UX', icon: <ShieldCheck size={16} /> }
       ]
     },
     {
-      step: 'ETAPA 5',
-      title: 'Agentes & Material Git',
+      step: 'ETAPA 4',
+      title: 'Backlog',
       items: [
-        { id: 'agent_studio', label: 'Hub de Agentes & Git', icon: <Bot size={16} />, badge: '6 IAs' },
+        { id: 'backlog', label: 'Backlog & Histórias BDD', icon: <Zap size={16} />, badge: epicCount > 0 ? `${epicCount}` : undefined },
+        { id: 'refine', label: 'Fatiar & Refinar (SPIDR)', icon: <Scissors size={16} /> }
+      ]
+    },
+    {
+      step: 'ETAPA 5',
+      title: 'Entrega',
+      items: [
+        { id: 'documentation', label: 'PRD Vivo & SPEC.md (IA)', icon: <FileText size={16} /> },
+        { id: 'agent_studio', label: 'Hub de Agentes & Git', icon: <Bot size={16} />, badge: '6 IAs' }
+      ]
+    },
+    {
+      step: 'APOIO',
+      title: 'Copiloto & Biblioteca',
+      items: [
+        { id: 'interview', label: 'Copiloto me entrevista', icon: <MessageCircle size={16} /> },
+        { id: 'po_space', label: 'Espaço do PO (IA Copilot)', icon: <Sparkles size={16} /> },
         { id: 'knowledge_hub', label: 'Acervo de Métodos Ágeis', icon: <BookOpen size={16} /> }
       ]
     }
@@ -156,7 +162,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             Projeto Ativo:
           </div>
           <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {projectName || 'Plataforma de Liquidação'}
+            {projectName || 'Projeto sem nome'}
           </div>
         </div>
       </div>

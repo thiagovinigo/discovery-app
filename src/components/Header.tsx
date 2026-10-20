@@ -10,11 +10,6 @@ import {
   Download,
   Share2,
   FileText,
-  Radio,
-  Zap,
-  Bot,
-  ChevronRight,
-  Rocket,
   X,
   CreditCard,
   Heart,
@@ -433,62 +428,6 @@ export const Header: React.FC<HeaderProps> = ({
   }
 
   // MODO 2: ÁREA DE TRABALHO DO PROJETO SELECIONADO
-  const JOURNEY_STEPS: {
-    step: number;
-    targetView: AppView;
-    activeMatches: AppView[];
-    label: string;
-    sublabel: string;
-    badge?: string;
-    icon: React.ComponentType<{ size?: number; color?: string; style?: React.CSSProperties }>;
-  }[] = [
-    {
-      step: 1,
-      targetView: 'project_hub',
-      activeMatches: ['project_hub'],
-      label: '1. Hub do Projeto',
-      sublabel: 'Visão & Escopo',
-      badge: 'Ativo',
-      icon: Rocket
-    },
-    {
-      step: 2,
-      targetView: 'live_room',
-      activeMatches: ['live_room', 'meetings'],
-      label: '2. Gravações & Discovery',
-      sublabel: 'Entrevistas ao Vivo',
-      badge: `${project.sessions.length} gravadas`,
-      icon: Radio
-    },
-    {
-      step: 3,
-      targetView: 'backlog',
-      activeMatches: ['backlog', 'refine'],
-      label: '3. Backlog & Histórias',
-      sublabel: 'BDD & DoR/DoD',
-      badge: `${project.epics.reduce((acc, e) => acc + e.features.reduce((fAcc, f) => fAcc + f.userStories.length, 0), 0)} stories`,
-      icon: Zap
-    },
-    {
-      step: 4,
-      targetView: 'documentation',
-      activeMatches: ['documentation'],
-      label: '4. PRD & SPEC para IA',
-      sublabel: 'Requisitos & Prompt',
-      badge: 'PRD.md',
-      icon: FileText
-    },
-    {
-      step: 5,
-      targetView: 'agent_studio',
-      activeMatches: ['agent_studio', 'knowledge_hub', 'brain_dashboard', 'po_space', 'product_audit'],
-      label: '5. Agentes & Material Git',
-      sublabel: '6 IAs & Repositórios',
-      badge: '6 IAs',
-      icon: Bot
-    }
-  ];
-
   return (
     <header
       className="header-container glass-panel"
@@ -607,32 +546,6 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Novo Projeto</span>
           </button>
 
-          {onNavigate && (
-            <>
-              <button
-                id="header-btn-live-room"
-                onClick={() => onNavigate('live_room')}
-                className="btn btn-secondary"
-                style={{ fontSize: '0.78rem', gap: '6px', border: activeView === 'live_room' ? '1px solid var(--accent-cyan)' : '1px solid var(--border-subtle)' }}
-                title="Ir direto para a gravação de entrevistas"
-              >
-                <Radio size={14} color="var(--accent-cyan)" />
-                Gravação ao Vivo
-              </button>
-
-              <button
-                id="header-btn-agentes-git"
-                onClick={() => onNavigate('agent_studio')}
-                className="btn btn-secondary"
-                style={{ fontSize: '0.78rem', gap: '6px', border: activeView === 'agent_studio' ? '1px solid #c084fc' : '1px solid var(--border-subtle)' }}
-                title="Acessar o Hub de Agentes e Material do Git"
-              >
-                <Bot size={14} color="#c084fc" />
-                Agentes IA & Git
-              </button>
-            </>
-          )}
-
           <button
             onClick={() => setShowExportMenu(!showExportMenu)}
             className="btn btn-secondary"
@@ -652,103 +565,6 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Settings size={15} />
           </button>
-        </div>
-      </div>
-
-      {/* Second Row: Persistent Interactive Global Journey Stepper for THIS project */}
-      <div
-        style={{
-          background: 'rgba(15, 23, 42, 0.6)',
-          borderRadius: '10px',
-          border: '1px solid rgba(255, 255, 255, 0.06)',
-          padding: '6px 10px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          overflowX: 'auto',
-          gap: '8px'
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', paddingRight: '8px', borderRight: '1px solid var(--border-subtle)', flexShrink: 0 }}>
-          <span style={{ fontSize: '0.68rem', fontWeight: 800, color: 'var(--accent-cyan)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Jornada do Projeto:
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, justifyContent: 'space-between', minWidth: '680px' }}>
-          {JOURNEY_STEPS.map((js, idx) => {
-            const isActive = activeView && js.activeMatches.includes(activeView);
-            const Icon = js.icon;
-
-            return (
-              <React.Fragment key={js.step}>
-                <button
-                  id={`header-step-${js.step}`}
-                  onClick={() => onNavigate && onNavigate(js.targetView)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    padding: '6px 12px',
-                    borderRadius: '8px',
-                    background: isActive ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(6, 182, 212, 0.2))' : 'transparent',
-                    border: isActive ? '1px solid rgba(6, 182, 212, 0.5)' : '1px solid transparent',
-                    cursor: onNavigate ? 'pointer' : 'default',
-                    transition: 'all 0.15s ease',
-                    textAlign: 'left'
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive) e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)';
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive) e.currentTarget.style.background = 'transparent';
-                  }}
-                >
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '6px',
-                    background: isActive ? 'var(--accent-cyan)' : 'rgba(255, 255, 255, 0.08)',
-                    color: isActive ? '#0f172a' : '#94a3b8',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 800,
-                    fontSize: '0.74rem'
-                  }}>
-                    <Icon size={13} color={isActive ? '#0f172a' : '#94a3b8'} />
-                  </div>
-
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <span style={{ fontSize: '0.78rem', fontWeight: isActive ? 800 : 600, color: isActive ? '#67e8f9' : 'var(--text-main)' }}>
-                        {js.label}
-                      </span>
-                      {js.badge && (
-                        <span style={{
-                          fontSize: '0.62rem',
-                          padding: '1px 5px',
-                          borderRadius: '4px',
-                          background: isActive ? 'rgba(6, 182, 212, 0.2)' : 'rgba(255, 255, 255, 0.06)',
-                          color: isActive ? '#67e8f9' : 'var(--text-dim)',
-                          fontWeight: 700
-                        }}>
-                          {js.badge}
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ fontSize: '0.66rem', color: 'var(--text-dim)' }}>
-                      {js.sublabel}
-                    </div>
-                  </div>
-                </button>
-
-                {idx < JOURNEY_STEPS.length - 1 && (
-                  <ChevronRight size={14} color="rgba(255, 255, 255, 0.2)" style={{ flexShrink: 0 }} />
-                )}
-              </React.Fragment>
-            );
-          })}
         </div>
       </div>
 
