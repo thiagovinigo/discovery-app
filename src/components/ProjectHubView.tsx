@@ -9,7 +9,6 @@ import {
   Calendar,
   Layers,
   ArrowRight,
-  TrendingUp,
   Flame,
   FileText,
   LayoutGrid,
@@ -24,6 +23,13 @@ interface ProjectHubViewProps {
   onNavigateToView: (view: any) => void;
 }
 
+/** Marca um campo que o usuário ainda não preencheu, em vez de mostrar texto de preenchimento como se fosse conteúdo. */
+const NotInformed: React.FC = () => (
+  <span style={{ color: 'var(--text-dim)', fontStyle: 'italic', fontWeight: 400 }}>
+    Ainda não informado. Use "Editar Detalhes do Produto" para preencher.
+  </span>
+);
+
 export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
   project,
   onUpdateProject,
@@ -32,9 +38,9 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(project.name);
   const [desc, setDesc] = useState(project.description);
-  const [vision, setVision] = useState(project.prd.valueProposition || 'Solução inteligente de conciliação e liquidação D+0 para clientes B2B.');
-  const [targetAudience, setTargetAudience] = useState(project.prd.targetAudience || 'CFOs, Gestores Financeiros e Redes de Lojistas credenciados.');
-  const [northStar, setNorthStar] = useState('Tempo médio de liquidação e repasse aos lojistas (< 15 minutos com 99.5% de precisão)');
+  const [vision, setVision] = useState(project.prd.valueProposition ?? '');
+  const [targetAudience, setTargetAudience] = useState(project.prd.targetAudience ?? '');
+  const [northStar, setNorthStar] = useState(project.prd.northStarMetric ?? '');
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +51,8 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
       prd: {
         ...project.prd,
         valueProposition: vision,
-        targetAudience
+        targetAudience,
+        northStarMetric: northStar
       }
     };
     onUpdateProject(updated);
@@ -115,11 +122,11 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
                 {project.name}
               </h4>
               <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: '1.5', marginBottom: '12px' }}>
-                {project.description}
+                {project.description || <NotInformed />}
               </p>
               <div style={{ background: 'rgba(99, 102, 241, 0.1)', padding: '12px 16px', borderRadius: '8px', border: '1px solid rgba(99, 102, 241, 0.3)', fontSize: '0.85rem' }}>
                 <strong style={{ color: 'var(--accent-cyan)' }}>Proposta Única de Valor: </strong>
-                {project.prd.valueProposition}
+                {project.prd.valueProposition || <NotInformed />}
               </div>
             </div>
           ) : (
@@ -128,6 +135,7 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>Nome do Produto</label>
                 <input
                   type="text"
+                  aria-label="Nome do Produto"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'rgba(15, 23, 42, 0.9)', color: 'white', fontSize: '0.88rem' }}
@@ -137,6 +145,7 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>Descrição / Problema</label>
                 <textarea
                   rows={2}
+                  aria-label="Descrição / Problema"
                   value={desc}
                   onChange={(e) => setDesc(e.target.value)}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'rgba(15, 23, 42, 0.9)', color: 'white', fontSize: '0.85rem', resize: 'none' }}
@@ -146,6 +155,7 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>Proposta Única de Valor</label>
                 <input
                   type="text"
+                  aria-label="Proposta Única de Valor"
                   value={vision}
                   onChange={(e) => setVision(e.target.value)}
                   style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'rgba(15, 23, 42, 0.9)', color: 'white', fontSize: '0.85rem' }}
@@ -166,11 +176,12 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
             </div>
             {!isEditing ? (
               <p style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)', lineHeight: '1.4' }}>
-                {northStar}
+                {project.prd.northStarMetric || <NotInformed />}
               </p>
             ) : (
               <input
                 type="text"
+                aria-label="North Star Metric"
                 value={northStar}
                 onChange={(e) => setNorthStar(e.target.value)}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'rgba(15, 23, 42, 0.9)', color: 'white', fontSize: '0.82rem' }}
@@ -190,11 +201,12 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
             </div>
             {!isEditing ? (
               <p style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-main)', lineHeight: '1.4' }}>
-                {project.prd.targetAudience}
+                {project.prd.targetAudience || <NotInformed />}
               </p>
             ) : (
               <input
                 type="text"
+                aria-label="Público Alvo"
                 value={targetAudience}
                 onChange={(e) => setTargetAudience(e.target.value)}
                 style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-subtle)', background: 'rgba(15, 23, 42, 0.9)', color: 'white', fontSize: '0.82rem' }}
@@ -202,61 +214,6 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
             )}
             <div style={{ marginTop: '10px', fontSize: '0.75rem', color: 'var(--text-dim)' }}>
               Personas que sentem a dor crítica e tomam a decisão de uso ou compra.
-            </div>
-          </div>
-        </div>
-
-        {/* Row 2.5: Calculadora de ROI de Discovery (Executive Dashboard) */}
-        <div
-          className="glass-card"
-          style={{
-            padding: '20px',
-            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(6, 182, 212, 0.12))',
-            border: '1px solid rgba(16, 185, 129, 0.35)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '14px'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <TrendingUp size={18} color="var(--accent-emerald)" />
-              <h4 style={{ fontSize: '0.92rem', fontWeight: 800, color: '#6ee7b7', textTransform: 'uppercase' }}>
-                Calculadora de ROI de Discovery & Retrabalho Evitado
-              </h4>
-            </div>
-            <span className="badge badge-emerald" style={{ fontSize: '0.72rem' }}>
-              Economia Comprovada por Evidências
-            </span>
-          </div>
-
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0, lineHeight: 1.45 }}>
-            Impacto econômico gerado ao validar hipóteses reais com stakeholders e descartar features prematuras antes de uma única linha de código ser escrita.
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-            <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Horas Economizadas</span>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#6ee7b7', marginTop: '2px' }}>160h</div>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>2 features prematuras descartadas</span>
-            </div>
-
-            <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Desperdício Evitado</span>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#67e8f9', marginTop: '2px' }}>R$ 24.000</div>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Custo médio squad R$ 150/hora</span>
-            </div>
-
-            <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Retorno do Discovery</span>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#a5b4fc', marginTop: '2px' }}>12.4x ROI</div>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Custo do discovery vs retrabalho</span>
-            </div>
-
-            <div style={{ padding: '12px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid var(--border-subtle)' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)', textTransform: 'uppercase', fontWeight: 700 }}>Clareza BDD Gherkin</span>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#fcd34d', marginTop: '2px' }}>92%</div>
-              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>Redução de idas e vindas de QA</span>
             </div>
           </div>
         </div>
@@ -271,12 +228,15 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
             <div style={{ padding: '14px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                 <span className="badge badge-emerald">ONDA 1: MVP ESSENCIAL (LANÇAMENTO)</span>
-                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Sprints 1 a 3</span>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Primeira entrega</span>
               </div>
               <ul style={{ paddingLeft: '16px', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {project.prd.inScope.slice(0, 3).map((item, idx) => (
                   <li key={idx}><strong>{item}</strong></li>
                 ))}
+                {project.prd.inScope.length === 0 && (
+                  <li style={{ listStyle: 'none', marginLeft: '-16px' }}><NotInformed /></li>
+                )}
               </ul>
             </div>
 
@@ -289,6 +249,9 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
                 {project.prd.outOfScope.map((item, idx) => (
                   <li key={idx}>{item}</li>
                 ))}
+                {project.prd.outOfScope.length === 0 && (
+                  <li style={{ listStyle: 'none', marginLeft: '-16px' }}><NotInformed /></li>
+                )}
               </ul>
             </div>
           </div>

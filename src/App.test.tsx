@@ -32,7 +32,7 @@ describe('App: começo limpo', () => {
     render(<App />);
     fireEvent.click(await screen.findByRole('button', { name: /Criar Meu Primeiro Projeto/ }));
 
-    fireEvent.change(screen.getByPlaceholderText(/Conciliação Automática PIX/), { target: { value: 'Meu produto' } });
+    fireEvent.change(screen.getByLabelText(/Nome do Projeto/), { target: { value: 'Meu produto' } });
     fireEvent.click(screen.getByRole('button', { name: /Criar e Começar Trabalho/ }));
 
     await waitFor(() => expect(storageService.getAllProjects()).toHaveLength(1));

@@ -740,6 +740,7 @@ export const App: React.FC = () => {
         {/* VIEW 0: PROJETO & PRODUTO INICIAL */}
         {activeView === 'project_hub' && (
           <ProjectHubView
+            key={activeProject.id}
             project={activeProject}
             onUpdateProject={(updated) => {
               saveProject(updated);

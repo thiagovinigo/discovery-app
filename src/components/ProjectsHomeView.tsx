@@ -333,26 +333,27 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
           </div>
 
           <div style={{ marginBottom: '14px' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+            <label htmlFor="input-project-name" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
               Nome do Projeto / Iniciativa
             </label>
             <input
               id="input-project-name"
               autoFocus
               required
-              placeholder="Ex: Conciliação Automática PIX e Cartões"
+              placeholder="Ex: Aplicativo de agendamento para clínicas"
               value={name}
               onChange={e => setName(e.target.value)}
               style={inputStyle}
             />
           </div>
           <div style={{ marginBottom: '18px' }}>
-            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
+            <label htmlFor="input-project-description" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '6px' }}>
               Objetivo / Desafio de Negócio
             </label>
             <textarea
+              id="input-project-description"
               rows={3}
-              placeholder="Ex: Reduzir tempo de fechamento financeiro de 4 dias para 15 minutos, eliminando inconsistências manuais..."
+              placeholder="Ex: Reduzir o tempo que a recepção gasta confirmando consultas por telefone..."
               value={description}
               onChange={e => setDescription(e.target.value)}
               style={{ ...inputStyle, resize: 'none' }}

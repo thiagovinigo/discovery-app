@@ -157,6 +157,8 @@ export interface PRDDocument {
   problemStatement: string;
   targetAudience: string;
   valueProposition: string;
+  /** Métrica que mede o valor real entregue ao usuário final. Opcional: só existe se o usuário a informou. */
+  northStarMetric?: string;
   inScope: string[];
   outOfScope: string[];
   successMetrics: string[];

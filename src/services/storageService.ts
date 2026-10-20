@@ -207,9 +207,10 @@ export const storageService = {
         title: `PRD: ${name}`,
         version: '0.1.0 (Rascunho Inicial)',
         lastUpdated: new Date().toLocaleDateString('pt-BR'),
-        problemStatement: 'Descreva aqui o problema principal identificado nas sessões.',
-        targetAudience: 'Personas e segmentos identificados.',
-        valueProposition: 'Proposta única de valor.',
+        // Vazios de propósito: o que o usuário não escreveu não deve aparecer como se fosse conteúdo
+        problemStatement: '',
+        targetAudience: '',
+        valueProposition: '',
         inScope: [],
         outOfScope: [],
         successMetrics: [],
