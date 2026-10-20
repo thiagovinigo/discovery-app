@@ -7,7 +7,7 @@ import type { BacklogActionsDeps } from './backlogActions';
 import type { PendingReview } from './pendingReviewStore';
 import type { EvidenceSuggestion } from '../services/evidenceService';
 import type { Proposal } from '../services/backlogProposals';
-import type { AcceptanceCriteria, DiscoveryProject, Epic, UserStory } from '../types/discovery';
+import type { AcceptanceCriteria, DiscoveryProject, Epic, MeetingSession, UserStory } from '../types/discovery';
 
 vi.mock('../services/geminiService', () => ({ geminiService: { generateFullBacklogAndPRD: vi.fn() } }));
 const generateMock = vi.mocked(geminiService.generateFullBacklogAndPRD);
@@ -196,6 +196,36 @@ describe('gerar propostas com a IA', () => {
     expect(deps.openBacklog).toHaveBeenCalled();
     expect(deps.setIsGenerating).toHaveBeenNthCalledWith(1, true);
     expect(deps.setIsGenerating).toHaveBeenLastCalledWith(false);
+  });
+
+  it('com várias sessões escolhidas, a IA recebe as falas de todas, cada uma sob o título da sua reunião', async () => {
+    generateMock.mockResolvedValue({ okrs: [], epics: [], prd: load().prd, source: 'ai' } as never);
+    const talk = (id: string, title: string, text: string): MeetingSession => ({
+      ...storageService.createNewSession(projectId, title),
+      id,
+      rawTranscript: [{ id: `seg-${id}`, speaker: 'Usuário / Stakeholder', text, timestamp: '00:01', isFinal: true }],
+      painPoints: [{ id: `p-${id}`, description: `Dor de ${title}`, severity: 'medium', frequencyScore: 1 }]
+    });
+    const { actions } = setup({ generationSessions: [talk('a', 'Kickoff', 'Primeira fala'), talk('b', 'Revisão', 'Segunda fala')] });
+
+    await actions.handleGenerateBacklogWithAI();
+
+    const [, transcript, pains] = generateMock.mock.calls[0];
+    expect(transcript).toContain('### Reunião: Kickoff');
+    expect(transcript).toContain('Primeira fala');
+    expect(transcript).toContain('### Reunião: Revisão');
+    expect(transcript).toContain('Segunda fala');
+    expect(pains).toHaveLength(2);
+  });
+
+  it('sem sessões escolhidas, usa só a sala ativa, como antes', async () => {
+    generateMock.mockResolvedValue({ okrs: [], epics: [], prd: load().prd, source: 'ai' } as never);
+    const active = { ...storageService.createNewSession(projectId, 'Ativa'), rawTranscript: [{ id: 's', speaker: 'Usuário / Stakeholder' as const, text: 'Só esta', timestamp: '00:01', isFinal: true }] };
+    const { actions } = setup({ session: active });
+
+    await actions.handleGenerateBacklogWithAI();
+
+    expect(generateMock.mock.calls[0][1]).toBe('Usuário / Stakeholder: Só esta');
   });
 
   it('falha da IA com chave configurada não gera pacote nem mexe no backlog', async () => {

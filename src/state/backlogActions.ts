@@ -5,6 +5,7 @@ import { applyProposals, mergeStories, planBacklogProposals } from '../services/
 import { changeWithSnapshot, lastSnapshot, undoLast } from '../services/backlogHistoryService';
 import { applyEvidence, suggestEvidence } from '../services/evidenceService';
 import type { EvidenceSuggestion } from '../services/evidenceService';
+import { buildGenerationInput } from '../services/generationInput';
 import { sliceStory } from '../services/slicingService';
 import type { StorySlicePart } from '../services/slicingService';
 import type { PendingReview } from './pendingReviewStore';
@@ -19,6 +20,8 @@ export interface BacklogActionsDeps {
   pendingEvidence: { projectId: string; suggestions: EvidenceSuggestion[] } | null;
   /** História aberta na janela de fatiar. */
   slicingStory?: UserStory;
+  /** Reuniões que alimentam a geração do backlog. Vazio ou ausente: só a sala ativa. */
+  generationSessions?: MeetingSession[];
   /** Aplica uma mudança ao projeto (sobre o estado mais recente) e grava. */
   update: (projectId: string, change: (project: DiscoveryProject) => DiscoveryProject) => void;
   showNotice: (type: NoticeType, text: string) => void;
@@ -110,13 +113,15 @@ export function createBacklogActions(deps: BacklogActionsDeps) {
   const handleGenerateBacklogWithAI = async () => {
     deps.setIsGenerating(true);
     try {
-      const transcript = session?.rawTranscript.map(t => `${t.speaker}: ${t.text}`).join('\n') || '';
+      // As reuniões escolhidas pelo usuário; sem escolha, só a sala ativa
+      const sources = deps.generationSessions?.length ? deps.generationSessions : session ? [session] : [];
+      const input = buildGenerationInput(sources);
       const hasKey = !!storageService.getApiKey();
       const result = await geminiService.generateFullBacklogAndPRD(
         project.name + ' - ' + project.description,
-        transcript,
-        session?.painPoints || [],
-        session?.jtbds || []
+        input.transcript,
+        input.painPoints,
+        input.jtbds
       );
 
       if (result.source === 'offline') {

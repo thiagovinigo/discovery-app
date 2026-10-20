@@ -28,6 +28,7 @@ import { BacklogReviewPanel } from './components/BacklogReviewPanel';
 import { EvidencePanel } from './components/EvidencePanel';
 import { lastSnapshot } from './services/backlogHistoryService';
 import { StorySliceDialog } from './components/StorySliceDialog';
+import { SessionSourcePicker } from './components/SessionSourcePicker';
 import type { EvidenceSuggestion } from './services/evidenceService';
 import { proposalsForMeetingType } from './services/backlogProposals';
 import { clearPendingReview, loadPendingReview, savePendingReview } from './state/pendingReviewStore';
@@ -98,6 +99,7 @@ export const App: React.FC = () => {
     else clearPendingReview();
   };
   const [slicingStoryId, setSlicingStoryId] = useState<string | null>(null);
+  const [generationSessionIds, setGenerationSessionIds] = useState<string[]>([]);
   const [pendingEvidence, setPendingEvidence] = useState<{ projectId: string; suggestions: EvidenceSuggestion[] } | null>(null);
   const [notice, setNotice] = useState<{ type: 'error' | 'info' | 'success'; text: string } | null>(null);
 
@@ -737,6 +739,7 @@ export const App: React.FC = () => {
     pendingReview,
     pendingEvidence,
     slicingStory,
+    generationSessions: activeProject.sessions.filter(s => generationSessionIds.includes(s.id)),
     update,
     showNotice,
     setPendingReview,
@@ -1142,6 +1145,7 @@ export const App: React.FC = () => {
               onDiscard={() => setPendingEvidence(null)}
             />
           )}
+          <SessionSourcePicker sessions={activeProject.sessions} selectedIds={generationSessionIds} onChange={setGenerationSessionIds} />
           <BacklogHealthPanel
             epics={activeProject.epics}
             onFindEvidence={handleFindEvidence}
