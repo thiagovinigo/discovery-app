@@ -41,3 +41,22 @@ describe('App: começo limpo', () => {
     expect(screen.queryByText('Nenhum projeto cadastrado')).toBeNull();
   });
 });
+
+describe('App: copiloto entrevistador', () => {
+  it('responder e confirmar grava no PRD e avança para a próxima pergunta', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Criar Meu Primeiro Projeto/ }));
+    fireEvent.change(screen.getByLabelText(/Nome do Projeto/), { target: { value: 'Meu produto' } });
+    fireEvent.click(screen.getByRole('button', { name: /Criar e Começar Trabalho/ }));
+
+    fireEvent.click(await screen.findByRole('button', { name: /Copiloto me entrevista/ }));
+    fireEvent.change(await screen.findByLabelText('Sua resposta'), {
+      target: { value: 'A recepção gasta duas horas por dia ligando para confirmar consultas e ainda assim um em cada cinco pacientes falta.' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar resposta' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Salvar' }));
+
+    await waitFor(() => expect(storageService.getAllProjects()[0].prd.problemStatement).toContain('duas horas por dia'));
+    expect(await screen.findByText('Pergunta 2 de 10')).toBeTruthy();
+  });
+});

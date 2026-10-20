@@ -19,6 +19,8 @@ import { planBacklogMerge } from './services/backlogMerge';
 import { useProjects } from './state/useProjects';
 import { NoticeToast } from './components/NoticeToast';
 import { StakeholdersView } from './components/StakeholdersView';
+import { InterviewView } from './components/InterviewView';
+import { applyAnswer, skipStep } from './services/interviewService';
 import { SessionPeopleBar } from './components/SessionPeopleBar';
 import {
   addStakeholder,
@@ -444,6 +446,15 @@ export const App: React.FC = () => {
     showNotice('info', 'Stakeholder removido.');
   };
 
+  const handleInterviewConfirm = (stepId: string, answer: string) => {
+    saveProject(applyAnswer(activeProject, stepId, answer));
+    showNotice('success', 'Resposta salva no projeto.');
+  };
+
+  const handleInterviewSkip = (stepId: string) => {
+    saveProject(skipStep(activeProject, stepId));
+  };
+
   const handleChangeSessionType = (sessionId: string, type: MeetingType) => {
     setSessionType(activeProject.id, sessionId, type);
     refresh();
@@ -835,6 +846,17 @@ export const App: React.FC = () => {
             onAdd={handleAddStakeholder}
             onUpdate={handleUpdateStakeholder}
             onRemove={handleRemoveStakeholder}
+            onOpenInterview={() => setActiveView('interview')}
+          />
+        )}
+
+        {/* VIEW: COPILOTO ENTREVISTADOR */}
+        {activeView === 'interview' && (
+          <InterviewView
+            project={activeProject}
+            onConfirm={handleInterviewConfirm}
+            onSkip={handleInterviewSkip}
+            onNavigateToView={(view) => setActiveView(view)}
           />
         )}
 

@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   GitBranch,
   ArrowLeft,
+  MessageCircle,
   Users
 } from 'lucide-react';
 
@@ -30,7 +31,8 @@ export type AppView =
   | 'product_audit'
   | 'knowledge_hub'
   | 'agent_studio'
-  | 'stakeholders';
+  | 'stakeholders'
+  | 'interview';
 
 interface SidebarProps {
   activeView: AppView;
@@ -84,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       step: 'ETAPA 4',
       title: 'Copiloto de IA & PO',
       items: [
+        { id: 'interview', label: 'Copiloto me entrevista', icon: <MessageCircle size={16} /> },
         { id: 'po_space', label: 'Espaço do PO (IA Copilot)', icon: <Sparkles size={16} /> },
         { id: 'product_audit', label: 'Banca Validadora PM/UX', icon: <ShieldCheck size={16} /> }
       ]
