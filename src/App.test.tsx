@@ -42,6 +42,33 @@ describe('App: começo limpo', () => {
   });
 });
 
+describe('App: agenda de reuniões', () => {
+  it('marcar uma reunião e iniciá-la abre a sala já com tipo, pauta e objetivo', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Criar Meu Primeiro Projeto/ }));
+    fireEvent.change(screen.getByLabelText(/Nome do Projeto/), { target: { value: 'Meu produto' } });
+    fireEvent.click(screen.getByRole('button', { name: /Criar e Começar Trabalho/ }));
+
+    fireEvent.click(await screen.findByRole('button', { name: /Agenda de Reuniões/ }));
+    fireEvent.change(await screen.findByLabelText('Título da reunião'), { target: { value: 'Kickoff' } });
+    fireEvent.change(screen.getByLabelText('Tipo da conversa'), { target: { value: 'alignment' } });
+    fireEvent.change(screen.getByLabelText('Data e hora'), { target: { value: '2099-03-10T14:00' } });
+    fireEvent.change(screen.getByLabelText('Objetivo'), { target: { value: 'Fechar o escopo' } });
+    fireEvent.change(screen.getByLabelText('Pauta (um item por linha)'), { target: { value: 'Prazo\nOrçamento' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar reunião' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Iniciar reunião' }));
+
+    expect(await screen.findByLabelText('Pauta da reunião')).toBeTruthy();
+    expect(screen.getByText(/Fechar o escopo/)).toBeTruthy();
+    await waitFor(() => {
+      const project = storageService.getAllProjects()[0];
+      expect(project.sessions[0]).toMatchObject({ title: 'Kickoff', type: 'alignment', agenda: ['Prazo', 'Orçamento'] });
+      expect(project.scheduledMeetings![0].status).toBe('started');
+    });
+  });
+});
+
 describe('App: anotações', () => {
   it('anotar, buscar e transformar em decisão e em história do backlog', async () => {
     render(<App />);

@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   GitBranch,
   ArrowLeft,
+  CalendarClock,
   MessageCircle,
   NotebookPen,
   Users
@@ -34,7 +35,8 @@ export type AppView =
   | 'agent_studio'
   | 'stakeholders'
   | 'interview'
-  | 'notes';
+  | 'notes'
+  | 'agenda';
 
 interface SidebarProps {
   activeView: AppView;
@@ -44,6 +46,7 @@ interface SidebarProps {
   sessionCount: number;
   stakeholderCount?: number;
   noteCount?: number;
+  upcomingMeetingCount?: number;
   projectName?: string;
 }
 
@@ -55,6 +58,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   sessionCount,
   stakeholderCount = 0,
   noteCount = 0,
+  upcomingMeetingCount = 0,
   projectName
 }) => {
   type Item = { id: AppView; label: string; icon: React.ReactNode; badge?: string; highlight?: boolean };
@@ -74,6 +78,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       step: 'ETAPA 2',
       title: 'Gravações & Discovery',
       items: [
+        { id: 'agenda', label: 'Agenda de Reuniões', icon: <CalendarClock size={16} />, badge: upcomingMeetingCount > 0 ? `${upcomingMeetingCount}` : undefined },
         { id: 'live_room', label: 'Gravação & Sala ao Vivo', icon: <Radio size={16} />, badge: transcriptCount > 0 ? `${transcriptCount}` : undefined },
         { id: 'meetings', label: 'Histórico de Entrevistas', icon: <History size={16} />, badge: sessionCount > 0 ? `${sessionCount}` : undefined }
       ]

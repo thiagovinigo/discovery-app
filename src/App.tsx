@@ -24,6 +24,10 @@ import { applyAnswer, skipStep } from './services/interviewService';
 import { NotesView } from './components/NotesView';
 import { addNote, promoteToDecision, promoteToStory, removeNote, updateNote } from './services/noteService';
 import type { NoteInput } from './services/noteService';
+import { AgendaView } from './components/AgendaView';
+import { SessionAgendaCard } from './components/SessionAgendaCard';
+import { cancelMeeting, removeMeeting, scheduleMeeting, startMeeting } from './services/meetingService';
+import type { MeetingInput } from './services/meetingService';
 import { SessionPeopleBar } from './components/SessionPeopleBar';
 import {
   addStakeholder,
@@ -489,6 +493,38 @@ export const App: React.FC = () => {
     showNotice('success', 'Anotação registrada no Decision Log (PRD Vivo).');
   };
 
+  const handleScheduleMeeting = (input: MeetingInput) => {
+    try {
+      scheduleMeeting(activeProject.id, input);
+      refresh();
+      showNotice('success', `Reunião "${input.title.trim()}" marcada.`);
+    } catch (e: unknown) {
+      showNotice('error', e instanceof Error ? e.message : 'Não foi possível marcar a reunião.');
+    }
+  };
+
+  const handleStartMeeting = (meetingId: string) => {
+    const session = startMeeting(activeProject.id, meetingId);
+    refresh();
+    if (!session) {
+      showNotice('error', 'Não foi possível iniciar esta reunião.');
+      return;
+    }
+    setActiveView('live_room');
+    showNotice('success', `Sala "${session.title}" aberta com a pauta e os participantes da agenda.`);
+  };
+
+  const handleCancelMeeting = (meetingId: string) => {
+    cancelMeeting(activeProject.id, meetingId);
+    refresh();
+    showNotice('info', 'Reunião cancelada.');
+  };
+
+  const handleRemoveMeeting = (meetingId: string) => {
+    removeMeeting(activeProject.id, meetingId);
+    refresh();
+  };
+
   const handlePromoteNoteToStory = (noteId: string) => {
     promoteToStory(activeProject.id, noteId);
     refresh();
@@ -833,6 +869,7 @@ export const App: React.FC = () => {
           sessionCount={activeProject.sessions.length}
           stakeholderCount={(activeProject.stakeholders ?? []).length}
           noteCount={(activeProject.notes ?? []).length}
+          upcomingMeetingCount={(activeProject.scheduledMeetings ?? []).filter(m => m.status === 'scheduled').length}
           projectName={activeProject.name}
         />
       )}
@@ -888,6 +925,17 @@ export const App: React.FC = () => {
             onUpdate={handleUpdateStakeholder}
             onRemove={handleRemoveStakeholder}
             onOpenInterview={() => setActiveView('interview')}
+          />
+        )}
+
+        {/* VIEW: AGENDA DE REUNIÕES */}
+        {activeView === 'agenda' && (
+          <AgendaView
+            project={activeProject}
+            onSchedule={handleScheduleMeeting}
+            onStart={handleStartMeeting}
+            onCancel={handleCancelMeeting}
+            onRemove={handleRemoveMeeting}
           />
         )}
 
@@ -992,6 +1040,8 @@ export const App: React.FC = () => {
               refresh();
             }}
           />
+
+          <SessionAgendaCard session={currentSession} />
 
           <AssistantPanel
             session={currentSession}

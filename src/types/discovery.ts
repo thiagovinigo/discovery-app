@@ -218,6 +218,9 @@ export interface MeetingSession {
   currentSpeakerId?: string;
   /** Reunião agendada que originou esta sala. */
   scheduledMeetingId?: string;
+  /** Objetivo e pauta combinados na agenda; aparecem na sala. */
+  objective?: string;
+  agenda?: string[];
   type?: MeetingType;
   assistant?: AssistantState;
 }
