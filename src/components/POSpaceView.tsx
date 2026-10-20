@@ -61,7 +61,7 @@ export const POSpaceView: React.FC<POSpaceViewProps> = ({ project, session }) =>
     const res = await chatWithProject(next.slice(-12), project, session);
     setLoading(false);
     if (res.error) setError(res.error);
-    else setMessages([...next, { role: 'assistant', text: res.text }]);
+    else setMessages([...next, { role: 'assistant', text: res.text, offline: res.offline }]);
   };
 
   return (
@@ -82,7 +82,8 @@ export const POSpaceView: React.FC<POSpaceViewProps> = ({ project, session }) =>
           {messages.length === 0 && (
             <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem' }}>
               <p style={{ marginBottom: '10px' }}>
-                Converse com a IA usando o contexto de <strong>{project.name}</strong> (reuniões, backlog e PRD). Comece por um atalho:
+                Converse com a IA usando o contexto de <strong>{project.name}</strong> (reuniões, anotações, stakeholders, backlog e PRD).
+                Sem chave de IA, ela responde só com o que está registrado, dizendo de onde veio. Comece por um atalho:
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {SHORTCUTS.map(s => (
@@ -110,6 +111,9 @@ export const POSpaceView: React.FC<POSpaceViewProps> = ({ project, session }) =>
               }}
             >
               {m.text}
+              {m.offline && (
+                <div style={{ marginTop: '6px', fontSize: '0.7rem', color: 'var(--text-dim)' }}>Resposta da busca no projeto, sem IA</div>
+              )}
             </div>
           ))}
           {loading && (

@@ -1,6 +1,10 @@
 import { DiscoveryProject, MeetingSession } from '../types/discovery';
 import { storageService } from './storageService';
 import { callAI } from './aiClient';
+import { searchProjectKnowledge } from './knowledgeService';
+import type { KnowledgeHit } from './knowledgeService';
+import { isFilled } from './interviewService';
+import { ROLE_LABELS } from './stakeholderService';
 
 export type AgentScope = 'meeting' | 'backlog' | 'general' | 'audit';
 
@@ -16,6 +20,8 @@ export interface ProjectAgent {
 export interface AgentResult {
   text: string;
   error?: string;
+  /** Verdadeiro quando a resposta veio da busca local no projeto, sem IA. */
+  offline?: boolean;
 }
 
 const BASE_RULES =
@@ -178,6 +184,11 @@ export const PROJECT_AGENTS: ProjectAgent[] = [
 
 export const agentsByScope = (scope: AgentScope) => PROJECT_AGENTS.filter(a => a.scope === scope);
 
+const MAX_CONTEXT_NOTES = 20;
+const MAX_NOTE_LENGTH = 300;
+const MAX_CONTEXT_DECISIONS = 15;
+const MAX_CHAT_HITS = 5;
+
 const clip = (s: string, max: number) => (s.length > max ? s.slice(0, max) + '…' : s);
 
 /** Monta um resumo textual do projeto (e da sessão em foco) para dar contexto à IA. */
@@ -186,14 +197,49 @@ export function buildProjectContext(project: DiscoveryProject, session?: Meeting
   lines.push(`# Projeto: ${project.name}`, project.description);
 
   const prd = project.prd;
-  lines.push(
-    '## PRD',
-    `Problema: ${prd.problemStatement}`,
-    `Público: ${prd.targetAudience}`,
-    `Valor: ${prd.valueProposition}`
-  );
-  if (prd.inScope.length) lines.push(`Escopo: ${prd.inScope.join('; ')}`);
-  if (prd.successMetrics.length) lines.push(`Métricas: ${prd.successMetrics.join('; ')}`);
+  const prdLines: string[] = [];
+  const addText = (label: string, value?: string) => {
+    if (isFilled(value)) prdLines.push(`${label}: ${value!.trim()}`);
+  };
+  const addList = (label: string, items: string[]) => {
+    if (items.length) prdLines.push(`${label}: ${items.join('; ')}`);
+  };
+  addText('Problema', prd.problemStatement);
+  addText('Público', prd.targetAudience);
+  addText('Valor', prd.valueProposition);
+  addText('North Star', prd.northStarMetric);
+  addList('Escopo', prd.inScope);
+  addList('Fora do escopo', prd.outOfScope);
+  addList('Métricas', prd.successMetrics);
+  addList('Premissas', prd.assumptions);
+  addList('Riscos', prd.risksAndMitigations.map(r => r.risk));
+  if (prdLines.length) lines.push('## PRD', ...prdLines);
+
+  const stakeholders = project.stakeholders ?? [];
+  if (stakeholders.length) {
+    lines.push('## Stakeholders');
+    stakeholders.forEach(s => {
+      const details = [ROLE_LABELS[s.role], s.organization].filter(Boolean).join(', ');
+      lines.push(`- ${s.name} (${details})${s.notes ? `: ${s.notes}` : ''}`);
+    });
+  }
+
+  const notes = [...(project.notes ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, MAX_CONTEXT_NOTES);
+  if (notes.length) {
+    lines.push('## Anotações do PO (mais recentes)');
+    notes.forEach(n => lines.push(`- ${n.tags.map(t => `#${t}`).join(' ')}${n.tags.length ? ' ' : ''}${clip(n.text, MAX_NOTE_LENGTH)}`));
+  }
+
+  const upcoming = (project.scheduledMeetings ?? []).filter(m => m.status === 'scheduled');
+  if (upcoming.length) {
+    lines.push('## Reuniões marcadas');
+    upcoming.forEach(m => lines.push(`- ${new Date(m.startsAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} — ${m.title}${m.objective ? `: ${m.objective}` : ''}`));
+  }
+
+  if (project.decisionLog.length) {
+    lines.push('## Decisões');
+    project.decisionLog.slice(-MAX_CONTEXT_DECISIONS).forEach(d => lines.push(`- ${d.decision} (${d.status})`));
+  }
 
   if (project.okrs.length) {
     lines.push('## OKRs');
@@ -279,6 +325,24 @@ export async function runAgent(
 export interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
+  /** A resposta veio da busca local no projeto, sem IA. */
+  offline?: boolean;
+}
+
+const KIND_LABELS: Record<KnowledgeHit['kind'], string> = {
+  fala: 'Fala', nota: 'Anotação', stakeholder: 'Stakeholder', dor: 'Dor', decisao: 'Decisão', backlog: 'Backlog', prd: 'PRD'
+};
+
+/** Resposta montada só com o que o projeto tem registrado, citando de onde veio. Sem trechos, diz que não achou. */
+function answerFromHits(hits: KnowledgeHit[], intro = ''): string {
+  if (hits.length === 0) {
+    return (
+      `${intro}Não encontrei nada registrado no projeto sobre isso. Registre a informação (anotações, reuniões, stakeholders) ` +
+      'ou configure uma chave de IA nas Configurações para respostas mais elaboradas.'
+    );
+  }
+  const items = hits.map(h => `- ${KIND_LABELS[h.kind]}: ${clip(h.text, 400)} _(${h.source})_`);
+  return `${intro}Encontrei isto registrado no projeto:\n${items.join('\n')}`;
 }
 
 export async function chatWithProject(
@@ -286,9 +350,17 @@ export async function chatWithProject(
   project: DiscoveryProject,
   session?: MeetingSession
 ): Promise<AgentResult> {
+  const lastQuestion = [...history].reverse().find(m => m.role === 'user')?.text ?? '';
+  const hits = searchProjectKnowledge(project, lastQuestion, MAX_CHAT_HITS);
+
   const k = requireKey();
-  if ('error' in k) return { text: '', error: k.error };
+  if ('error' in k) return { text: answerFromHits(hits, 'Sem chave de IA, respondi só com a busca no projeto. '), offline: true };
+
   const convo = history.map(m => `${m.role === 'user' ? 'PO' : 'Assistente'}: ${m.text}`).join('\n\n');
+  const found = hits.length
+    ? 'TRECHOS ENCONTRADOS NO PROJETO PARA ESTA PERGUNTA (cite a fonte de cada informação que usar):\n' +
+      hits.map((h, i) => `[${i + 1}] ${h.text} (fonte: ${h.source})`).join('\n')
+    : 'Nenhum trecho do projeto casou com a pergunta. Se a resposta depender de fatos do projeto, diga que não há registro.';
   try {
     const text = await callAI({
       provider: k.provider,
@@ -300,12 +372,16 @@ export async function chatWithProject(
         'Você é o copiloto de IA do Product Owner no "Discovery ao Done", especialista em discovery contínuo, ' +
         'Mom Test, JTBD, user stories INVEST e priorização. Ajude o PO a refinar o projeto. ' +
         BASE_RULES +
-        ' Quando sugerir texto de backlog (histórias, critérios), entregue pronto para copiar.',
-      userPrompt: `CONTEXTO DO PROJETO:\n${buildProjectContext(project, session)}\n\nCONVERSA ATÉ AGORA:\n${convo}\n\nResponda à última mensagem do PO.`
+        ' Quando sugerir texto de backlog (histórias, critérios), entregue pronto para copiar.' +
+        ' Ao afirmar fatos do projeto, cite a fonte (reunião, anotação, stakeholder…). Se a informação não estiver no contexto, ' +
+        'diga que não há registro; não invente.',
+      userPrompt:
+        `CONTEXTO DO PROJETO:\n${buildProjectContext(project, session)}\n\n${found}\n\n` +
+        `CONVERSA ATÉ AGORA:\n${convo}\n\nResponda à última mensagem do PO.`
     });
     return { text };
   } catch (e) {
-    return { text: '', error: toError(e) };
+    return { text: answerFromHits(hits, `A IA não respondeu (${toError(e)}). Resultado da busca no projeto:\n\n`), offline: true };
   }
 }
 

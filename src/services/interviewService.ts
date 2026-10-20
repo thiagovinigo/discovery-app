@@ -27,17 +27,18 @@ export const INTERVIEW_STEPS: InterviewStep[] = [
   { id: 'risks', title: 'Riscos', kind: 'list', question: 'Quais riscos podem fazer isso dar errado?', hint: 'Um risco por linha.' }
 ];
 
-const filled = (text?: string): boolean => !!text && text.trim() !== '' && !/^descreva\b/i.test(text.trim());
+/** Texto realmente preenchido: não vazio e que não seja o texto de preenchimento antigo do PRD ("Descreva…"). */
+export const isFilled = (text?: string): boolean => !!text && text.trim() !== '' && !/^descreva\b/i.test(text.trim());
 
 /** O projeto já tem a informação que esta etapa pediria, ou o usuário escolheu pular? */
 export function stepAnswered(project: DiscoveryProject, step: InterviewStep): boolean {
   if ((project.interview?.skipped ?? []).includes(step.id)) return true;
   const prd = project.prd;
   switch (step.id) {
-    case 'problem': return filled(prd.problemStatement);
-    case 'audience': return filled(prd.targetAudience);
-    case 'value': return filled(prd.valueProposition);
-    case 'northStar': return filled(prd.northStarMetric);
+    case 'problem': return isFilled(prd.problemStatement);
+    case 'audience': return isFilled(prd.targetAudience);
+    case 'value': return isFilled(prd.valueProposition);
+    case 'northStar': return isFilled(prd.northStarMetric);
     case 'metrics': return prd.successMetrics.length > 0;
     case 'stakeholders': return (project.stakeholders ?? []).length > 0;
     case 'scope': return prd.inScope.length > 0;
