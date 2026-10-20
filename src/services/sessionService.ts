@@ -1,5 +1,7 @@
 import { storageService } from './storageService';
 import type { AnalysisResponse } from './geminiService';
+import { syncMindMap } from './mindMapService';
+import { suggestTopicQuestions } from './topicService';
 import type { DiscoveryProject, MeetingSession, TranscriptSegment } from '../types/discovery';
 
 /**
@@ -30,30 +32,11 @@ function withSpeaker(segment: TranscriptSegment, session: MeetingSession): Trans
 }
 
 /** Mescla o resultado de uma análise ao vivo na sessão, ignorando itens repetidos. */
-function mergeAnalysis(session: MeetingSession, projectName: string, analysis: AnalysisResponse): MeetingSession {
+function mergeAnalysis(session: MeetingSession, project: DiscoveryProject, analysis: AnalysisResponse): MeetingSession {
   const mindMapNodes = [...session.mindMapNodes];
-  let root = mindMapNodes.find(n => n.type === 'root');
-  if (!root) {
-    root = {
-      id: 'm-root',
-      label: session.title || projectName || 'Objetivo do Discovery',
-      type: 'root',
-      x: 400,
-      y: 250,
-      color: '#6366f1'
-    };
-    mindMapNodes.unshift(root);
-  }
-  const rootId = root.id;
-  const mindMapEdges = [...session.mindMapEdges];
   for (const node of analysis.newMindMapNodes) {
     if (mindMapNodes.some(n => normalize(n.label) === normalize(node.label))) continue;
     mindMapNodes.push(node);
-    mindMapEdges.push({
-      id: 'edge-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
-      source: rootId,
-      target: node.id
-    });
   }
 
   const userFlowSteps = [...session.userFlowSteps];
@@ -71,15 +54,34 @@ function mergeAnalysis(session: MeetingSession, projectName: string, analysis: A
   const knownJobs = new Set(session.jtbds.map(j => normalize(j.job)));
   const freshJobs = analysis.newJtbds.filter(j => !knownJobs.has(normalize(j.job)));
 
-  return {
+  const merged: MeetingSession = {
     ...session,
     liveQuestions: [...freshQuestions, ...session.liveQuestions],
     painPoints: [...session.painPoints, ...freshPains],
     jtbds: [...session.jtbds, ...freshJobs],
     mindMapNodes,
-    mindMapEdges,
     userFlowSteps
   };
+  // Perguntas pelo que a conversa ainda não respondeu, em cada assunto que ela já tem
+  const withQuestions: MeetingSession = {
+    ...merged,
+    liveQuestions: [...suggestTopicQuestions(merged), ...merged.liveQuestions]
+  };
+  return syncMindMap(withQuestions, project.name, project.stakeholders ?? []);
+}
+
+/** Refaz o mapa mental com o que a sessão tem agora (transcrição, dores, JTBDs), sem chamar IA. */
+export function refreshMindMap(projectId: string, sessionId: string): DiscoveryProject | undefined {
+  return updateSession(projectId, sessionId, (s, p) => syncMindMap(s, p.name, p.stakeholders ?? []));
+}
+
+/** Edições do usuário no mapa: renomear, acrescentar e apagar nós. Valem mesmo quando a análise refaz o mapa. */
+export function editMindMap(
+  projectId: string,
+  sessionId: string,
+  edit: (session: MeetingSession) => MeetingSession
+): DiscoveryProject | undefined {
+  return updateSession(projectId, sessionId, s => edit(s));
 }
 
 /**
@@ -132,5 +134,5 @@ export function applyLiveAnalysis(
   sessionId: string,
   analysis: AnalysisResponse
 ): DiscoveryProject | undefined {
-  return updateSession(projectId, sessionId, (s, p) => mergeAnalysis(s, p.name, analysis));
+  return updateSession(projectId, sessionId, (s, p) => mergeAnalysis(s, p, analysis));
 }

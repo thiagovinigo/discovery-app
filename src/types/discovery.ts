@@ -39,12 +39,20 @@ export interface JTBDItem {
 export interface MindMapNode {
   id: string;
   label: string;
-  type: 'root' | 'pain' | 'jtbd' | 'opportunity' | 'solution' | 'metric';
+  type: 'root' | 'topic' | 'pain' | 'jtbd' | 'opportunity' | 'solution' | 'metric';
   x: number;
   y: number;
   notes?: string;
   children?: string[]; // IDs
   color?: string;
+  /** Nó de quem este é ramo. Sem pai, o nó é filho direto da raiz. */
+  parentId?: string;
+  /** Escrito ou editado pelo usuário: a análise automática não o apaga nem o sobrescreve. */
+  manual?: boolean;
+  /** Fala que originou o nó, com quem disse e quando. */
+  quote?: string;
+  speaker?: string;
+  timestamp?: string;
 }
 
 export interface MindMapEdge {
@@ -267,6 +275,8 @@ export interface MeetingSession {
   /** Objetivo e pauta combinados na agenda; aparecem na sala. */
   objective?: string;
   agenda?: string[];
+  /** Ids de nós gerados automaticamente que o usuário apagou, para a análise não os recriar. */
+  mindMapHiddenIds?: string[];
   type?: MeetingType;
   assistant?: AssistantState;
 }

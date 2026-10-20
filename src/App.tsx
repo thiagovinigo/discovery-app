@@ -12,9 +12,12 @@ import {
   appendSegment,
   appendSegments,
   applyLiveAnalysis,
+  editMindMap,
   getActiveSessionContext,
-  markQuestionAsked
+  markQuestionAsked,
+  refreshMindMap
 } from './services/sessionService';
+import { addChildNode, deleteNode, renameNode } from './services/mindMapService';
 import { useProjects } from './state/useProjects';
 import { NoticeToast } from './components/NoticeToast';
 import { StakeholdersView } from './components/StakeholdersView';
@@ -344,6 +347,18 @@ export const App: React.FC = () => {
     showNotice('success', 'Todos os projetos foram apagados. Crie o seu para começar do zero.');
   };
 
+  // Mapas de versões antigas (nós soltos, sem pai) ganham a estrutura em árvore ao abrir a sala
+  const legacyMapSessionId = activeProject?.sessions.find(
+    s => s.id === (activeProject.activeSessionId || activeProject.sessions[0]?.id)
+  )?.mindMapNodes.some(n => n.type !== 'root' && !n.parentId)
+    ? (activeProject.activeSessionId || activeProject.sessions[0]?.id)
+    : undefined;
+  useEffect(() => {
+    if (!activeProject || !legacyMapSessionId) return;
+    refreshMindMap(activeProject.id, legacyMapSessionId);
+    refresh();
+  }, [activeProject, legacyMapSessionId, refresh]);
+
   // Sem nenhum projeto: mostra só a tela inicial, para o usuário criar ou importar o primeiro
   if (!activeProject) {
     if (!ready) return null;
@@ -671,6 +686,19 @@ export const App: React.FC = () => {
     };
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  const handleEditMap = (edit: (session: MeetingSession) => MeetingSession) => {
+    if (!currentSession) return;
+    editMindMap(activeProject.id, currentSession.id, edit);
+    refresh();
+  };
+
+  const handleRefreshMap = () => {
+    if (!currentSession) return;
+    refreshMindMap(activeProject.id, currentSession.id);
+    refresh();
+    showNotice('success', 'Mapa mental atualizado com o que foi dito até agora.');
   };
 
   const handleAddFlowStep = (stepData: Omit<UserFlowStep, 'id'>) => {
@@ -1067,7 +1095,10 @@ export const App: React.FC = () => {
                 {activeRightTab === 'mindmap' ? (
                   <MindMapCanvas
                     nodes={currentSession?.mindMapNodes || []}
-                    edges={currentSession?.mindMapEdges || []}
+                    onRename={(id, label) => handleEditMap(s => renameNode(s, id, label))}
+                    onAddChild={(parentId, label) => handleEditMap(s => addChildNode(s, parentId, label))}
+                    onDelete={id => handleEditMap(s => deleteNode(s, id))}
+                    onRefresh={handleRefreshMap}
                     onTriggerAnalysis={handleAnalyzeSessionWithAI}
                     isAnalyzing={isAnalyzingLive}
                   />
