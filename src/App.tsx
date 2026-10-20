@@ -20,26 +20,14 @@ import { useProjects } from './state/useProjects';
 import { NoticeToast } from './components/NoticeToast';
 import { StakeholdersView } from './components/StakeholdersView';
 import { InterviewView } from './components/InterviewView';
-import { applyAnswer, skipStep } from './services/interviewService';
+import { createProjectActions } from './state/projectActions';
 import { NotesView } from './components/NotesView';
-import { addNote, promoteToDecision, promoteToStory, removeNote, updateNote } from './services/noteService';
-import type { NoteInput } from './services/noteService';
 import { AgendaView } from './components/AgendaView';
 import { SessionAgendaCard } from './components/SessionAgendaCard';
-import { cancelMeeting, removeMeeting, scheduleMeeting, startMeeting } from './services/meetingService';
-import type { MeetingInput } from './services/meetingService';
 import { SessionClosingPanel } from './components/SessionClosingPanel';
-import { closingOf, saveClosing } from './services/meetingCopilotService';
-import type { ClosingAnswers } from './services/meetingCopilotService';
+import { closingOf } from './services/meetingCopilotService';
 import { SessionPeopleBar } from './components/SessionPeopleBar';
-import {
-  addStakeholder,
-  removeStakeholder,
-  setCurrentSpeaker,
-  setSessionParticipants,
-  updateStakeholder
-} from './services/stakeholderService';
-import type { StakeholderInput } from './services/stakeholderService';
+import { setCurrentSpeaker, setSessionParticipants } from './services/stakeholderService';
 import { AssistantPanel } from './components/AssistantPanel';
 import { runAssistant, setAssistantEnabled, setSessionType } from './services/assistantService';
 import type { MeetingType } from './types/discovery';
@@ -71,20 +59,12 @@ import type { AppView } from './components/Sidebar';
 
 import {
   Radio,
-  Zap,
-  FileText,
   GitBranch,
   Workflow,
   Plus,
-  BookOpen,
-  Brain,
-  Rocket,
-  Bot,
   Maximize2,
   Minimize2,
-  Keyboard,
-  Coffee,
-  Sparkles
+  Keyboard
 } from 'lucide-react';
 
 export const App: React.FC = () => {
@@ -430,120 +410,30 @@ export const App: React.FC = () => {
     refresh();
   };
 
-  const handleAddStakeholder = (input: StakeholderInput) => {
-    try {
-      addStakeholder(activeProject.id, input);
-      refresh();
-      showNotice('success', `${input.name} foi cadastrado(a) como stakeholder.`);
-    } catch (e: any) {
-      showNotice('error', e?.message || 'Não foi possível cadastrar o stakeholder.');
-    }
-  };
-
-  const handleUpdateStakeholder = (stakeholderId: string, changes: Partial<StakeholderInput>) => {
-    try {
-      updateStakeholder(activeProject.id, stakeholderId, changes);
-      refresh();
-      showNotice('success', 'Stakeholder atualizado.');
-    } catch (e: any) {
-      showNotice('error', e?.message || 'Não foi possível atualizar o stakeholder.');
-    }
-  };
-
-  const handleRemoveStakeholder = (stakeholderId: string) => {
-    removeStakeholder(activeProject.id, stakeholderId);
-    refresh();
-    showNotice('info', 'Stakeholder removido.');
-  };
-
-  const handleInterviewConfirm = (stepId: string, answer: string) => {
-    saveProject(applyAnswer(activeProject, stepId, answer));
-    showNotice('success', 'Resposta salva no projeto.');
-  };
-
-  const handleInterviewSkip = (stepId: string) => {
-    saveProject(skipStep(activeProject, stepId));
-  };
-
-  const handleAddNote = (input: NoteInput) => {
-    try {
-      addNote(activeProject.id, input);
-      refresh();
-      showNotice('success', 'Anotação salva.');
-    } catch (e: unknown) {
-      showNotice('error', e instanceof Error ? e.message : 'Não foi possível salvar a anotação.');
-    }
-  };
-
-  const handleUpdateNote = (noteId: string, changes: Pick<NoteInput, 'text' | 'tags'>) => {
-    try {
-      updateNote(activeProject.id, noteId, changes);
-      refresh();
-    } catch (e: unknown) {
-      showNotice('error', e instanceof Error ? e.message : 'Não foi possível editar a anotação.');
-    }
-  };
-
-  const handleRemoveNote = (noteId: string) => {
-    removeNote(activeProject.id, noteId);
-    refresh();
-    showNotice('info', 'Anotação excluída.');
-  };
-
-  const handlePromoteNoteToDecision = (noteId: string) => {
-    promoteToDecision(activeProject.id, noteId);
-    refresh();
-    showNotice('success', 'Anotação registrada no Decision Log (PRD Vivo).');
-  };
-
-  const handleScheduleMeeting = (input: MeetingInput) => {
-    try {
-      scheduleMeeting(activeProject.id, input);
-      refresh();
-      showNotice('success', `Reunião "${input.title.trim()}" marcada.`);
-    } catch (e: unknown) {
-      showNotice('error', e instanceof Error ? e.message : 'Não foi possível marcar a reunião.');
-    }
-  };
-
-  const handleStartMeeting = (meetingId: string) => {
-    const session = startMeeting(activeProject.id, meetingId);
-    refresh();
-    if (!session) {
-      showNotice('error', 'Não foi possível iniciar esta reunião.');
-      return;
-    }
-    setActiveView('live_room');
-    showNotice('success', `Sala "${session.title}" aberta com a pauta e os participantes da agenda.`);
-  };
-
-  const handleSaveClosing = (answers: ClosingAnswers) => {
-    if (!currentSession) return;
-    try {
-      saveClosing(activeProject.id, currentSession, answers);
-      refresh();
-      showNotice('success', 'Fechamento da reunião salvo em Anotações.');
-    } catch (e: unknown) {
-      showNotice('error', e instanceof Error ? e.message : 'Não foi possível salvar o fechamento.');
-    }
-  };
-
-  const handleCancelMeeting = (meetingId: string) => {
-    cancelMeeting(activeProject.id, meetingId);
-    refresh();
-    showNotice('info', 'Reunião cancelada.');
-  };
-
-  const handleRemoveMeeting = (meetingId: string) => {
-    removeMeeting(activeProject.id, meetingId);
-    refresh();
-  };
-
-  const handlePromoteNoteToStory = (noteId: string) => {
-    promoteToStory(activeProject.id, noteId);
-    refresh();
-    showNotice('success', 'História criada no épico "Anotações do projeto" do Backlog.');
-  };
+  const {
+    handleAddStakeholder,
+    handleUpdateStakeholder,
+    handleRemoveStakeholder,
+    handleInterviewConfirm,
+    handleInterviewSkip,
+    handleAddNote,
+    handleUpdateNote,
+    handleRemoveNote,
+    handlePromoteNoteToDecision,
+    handlePromoteNoteToStory,
+    handleScheduleMeeting,
+    handleStartMeeting,
+    handleCancelMeeting,
+    handleRemoveMeeting,
+    handleSaveClosing
+  } = createProjectActions({
+    project: activeProject,
+    session: currentSession,
+    refresh,
+    saveProject,
+    showNotice,
+    openLiveRoom: () => setActiveView('live_room')
+  });
 
   const handleChangeSessionType = (sessionId: string, type: MeetingType) => {
     setSessionType(activeProject.id, sessionId, type);
