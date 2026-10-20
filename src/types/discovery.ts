@@ -219,6 +219,7 @@ export interface MeetingSession {
   /** Reunião agendada que originou esta sala. */
   scheduledMeetingId?: string;
   type?: MeetingType;
+  assistant?: AssistantState;
 }
 
 export type StakeholderRole = 'decisor' | 'patrocinador' | 'usuario' | 'especialista' | 'impactado' | 'outro';
@@ -250,7 +251,53 @@ export interface ProjectNote {
   updatedAt: string;
 }
 
-export type MeetingType = 'discovery' | 'alignment' | 'refinement';
+/**
+ * Tipo da conversa, que define o que o assistente faz:
+ * - `discovery`: o PO entrevista; o assistente sugere perguntas profundas para o PRD e a SPEC.
+ * - `interview`: o PO é entrevistado; o assistente responde às perguntas e dá exemplos.
+ * - `alignment`: reunião de alinhamento; o assistente organiza tópicos com ideias embaixo.
+ * - `refinement`: refinamento; o assistente levanta critérios de aceite, dúvidas de escopo e dependências.
+ */
+export type MeetingType = 'discovery' | 'interview' | 'alignment' | 'refinement';
+
+export interface AssistantAnswer {
+  question: string;
+  answer: string;
+  example: string;
+}
+
+export interface AssistantTopic {
+  title: string;
+  ideas: string[];
+}
+
+export interface AssistantProbe {
+  question: string;
+  why: string;
+  /** O que a resposta alimenta: o PRD (negócio) ou a SPEC (comportamento técnico). */
+  target: 'prd' | 'spec';
+}
+
+export interface AssistantOutput {
+  id: string;
+  mode: MeetingType;
+  createdAt: string;
+  /** 'ai' = resposta da IA; 'offline' = gerada por regras locais, sem IA. */
+  source: 'ai' | 'offline';
+  error?: string;
+  /** Ids das falas que o assistente leu para gerar isto. */
+  basedOnSegmentIds: string[];
+  answers?: AssistantAnswer[];
+  topics?: AssistantTopic[];
+  probes?: AssistantProbe[];
+}
+
+export interface AssistantState {
+  /** Quando ligado, o assistente analisa cada fala nova da reunião. */
+  enabled: boolean;
+  lastSegmentId?: string;
+  outputs: AssistantOutput[];
+}
 
 export interface ScheduledMeeting {
   id: string;

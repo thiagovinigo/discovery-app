@@ -28,6 +28,9 @@ import {
   updateStakeholder
 } from './services/stakeholderService';
 import type { StakeholderInput } from './services/stakeholderService';
+import { AssistantPanel } from './components/AssistantPanel';
+import { runAssistant, setAssistantEnabled, setSessionType } from './services/assistantService';
+import type { MeetingType } from './types/discovery';
 import { audioService, type AudioStatus } from './services/audioService';
 import { transcribeAudioWithWhisper } from './services/openAiClient';
 
@@ -82,6 +85,7 @@ export const App: React.FC = () => {
   const [isGeneratingBacklog, setIsGeneratingBacklog] = useState(false);
   const [isAnalyzingLive, setIsAnalyzingLive] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
+  const [isAssistantBusy, setIsAssistantBusy] = useState(false);
   const [notice, setNotice] = useState<{ type: 'error' | 'info' | 'success'; text: string } | null>(null);
 
   // New Specialist backlog features: Focus Mode & Informal Chat Mode
@@ -158,6 +162,13 @@ export const App: React.FC = () => {
 
     const withSegment = appendSegment(project.id, session.id, newSeg);
     if (withSegment) refresh();
+
+    // Assistente ligado: acompanha cada fala nova, conforme o tipo da conversa
+    if (session.assistant?.enabled) {
+      void runAssistant(project.id, session.id).then(updated => {
+        if (updated) refresh();
+      });
+    }
 
     // Modo Bate-Papo Informal: salva a fala sem acionar IA (economiza tokens e preserva foco)
     if (isInformalChatRef.current) return;
@@ -431,6 +442,28 @@ export const App: React.FC = () => {
     removeStakeholder(activeProject.id, stakeholderId);
     refresh();
     showNotice('info', 'Stakeholder removido.');
+  };
+
+  const handleChangeSessionType = (sessionId: string, type: MeetingType) => {
+    setSessionType(activeProject.id, sessionId, type);
+    refresh();
+  };
+
+  const handleToggleAssistant = (sessionId: string, enabled: boolean) => {
+    setAssistantEnabled(activeProject.id, sessionId, enabled);
+    refresh();
+    showNotice('info', enabled ? 'Assistente ligado: ele acompanha cada fala nova.' : 'Assistente desligado.');
+  };
+
+  const handleRunAssistantNow = async (sessionId: string) => {
+    setIsAssistantBusy(true);
+    try {
+      const updated = await runAssistant(activeProject.id, sessionId, { force: true });
+      if (updated) refresh();
+      else showNotice('info', 'Não há falas para o assistente analisar ainda.');
+    } finally {
+      setIsAssistantBusy(false);
+    }
   };
 
   const handleStartFirstSession = () => {
@@ -883,6 +916,14 @@ export const App: React.FC = () => {
               setCurrentSpeaker(activeProject.id, currentSession.id, id);
               refresh();
             }}
+          />
+
+          <AssistantPanel
+            session={currentSession}
+            busy={isAssistantBusy}
+            onChangeType={(type) => handleChangeSessionType(currentSession.id, type)}
+            onToggle={(enabled) => handleToggleAssistant(currentSession.id, enabled)}
+            onRunNow={() => handleRunAssistantNow(currentSession.id)}
           />
 
           <div style={{ margin: '0 -20px' }}>
