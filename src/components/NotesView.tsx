@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { NotebookPen } from 'lucide-react';
+import { Mic, MicOff, NotebookPen } from 'lucide-react';
+import { useDictation } from '../state/useDictation';
 import type { DiscoveryProject, ProjectNote } from '../types/discovery';
 import { allTags, filterNotes, parseTags } from '../services/noteService';
 import type { NoteInput } from '../services/noteService';
@@ -105,7 +106,11 @@ export const NotesView: React.FC<NotesViewProps> = ({ project, onAdd, onUpdate, 
   const tags = useMemo(() => allTags(notes), [notes]);
   const nameOf = (id?: string) => stakeholders.find(s => s.id === id)?.name;
 
+  // Ditar ou digitar: a fala entra no mesmo campo, depois do que já está lá
+  const dictation = useDictation({ onText: spoken => setText(current => (current.trim() ? `${current.trim()} ${spoken}` : spoken)) });
+
   const add = () => {
+    dictation.stop();
     onAdd({ text, tags: parseTags(tagsText), stakeholderId: stakeholderId || undefined });
     setText('');
     setTagsText('');
@@ -125,8 +130,29 @@ export const NotesView: React.FC<NotesViewProps> = ({ project, onAdd, onUpdate, 
 
       <div className="glass-panel" style={{ padding: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
         <div>
-          <label htmlFor="note-new-text" style={labelStyle}>Nova anotação</label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
+            <label htmlFor="note-new-text" style={{ ...labelStyle, marginBottom: 0 }}>Nova anotação</label>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              style={{ ...smallButton, gap: '5px', background: dictation.listening ? 'rgba(244, 63, 94, 0.25)' : undefined, border: dictation.listening ? '1px solid #f43f5e' : undefined }}
+              disabled={!dictation.supported}
+              aria-pressed={dictation.listening}
+              onClick={dictation.listening ? dictation.stop : dictation.start}
+              title={dictation.supported ? 'Fale e o texto entra no campo' : 'O ditado por voz funciona no Chrome e no Edge'}
+            >
+              {dictation.listening ? <MicOff size={13} /> : <Mic size={13} />}
+              {dictation.listening ? 'Parar ditado' : 'Ditar por voz'}
+            </button>
+          </div>
           <textarea id="note-new-text" value={text} onChange={e => setText(e.target.value)} style={{ ...fieldStyle, minHeight: '80px' }} />
+          {dictation.listening && dictation.interim && (
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.76rem', fontStyle: 'italic', color: 'var(--text-muted)' }}>{`Ouvindo: ${dictation.interim}`}</p>
+          )}
+          {dictation.error && <p role="alert" style={{ margin: '4px 0 0 0', fontSize: '0.76rem', color: '#fda4af' }}>{dictation.error}</p>}
+          {!dictation.supported && (
+            <p style={{ margin: '4px 0 0 0', fontSize: '0.74rem', color: 'var(--text-dim)' }}>O ditado por voz funciona no Chrome e no Edge. Aqui você pode digitar normalmente.</p>
+          )}
         </div>
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 220px' }}>

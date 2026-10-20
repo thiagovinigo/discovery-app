@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { NotesView } from './NotesView';
 import { storageService } from '../services/storageService';
 import type { DiscoveryProject, ProjectNote } from '../types/discovery';
@@ -65,6 +65,118 @@ describe('NotesView: nova anotação', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Adicionar anotação' }));
 
     expect(onAdd).toHaveBeenCalledWith({ text: 'Ideia solta', tags: [], stakeholderId: undefined });
+  });
+});
+
+describe('NotesView: ditado por voz', () => {
+  interface FakeResult { isFinal: boolean; 0: { transcript: string } }
+  class FakeRecognition {
+    static current: FakeRecognition | null = null;
+    continuous = false;
+    interimResults = false;
+    lang = '';
+    started = false;
+    onresult: ((event: { resultIndex: number; results: FakeResult[] }) => void) | null = null;
+    onerror: ((event: { error: string }) => void) | null = null;
+    onend: (() => void) | null = null;
+    constructor() {
+      FakeRecognition.current = this;
+    }
+    start() { this.started = true; }
+    stop() { this.started = false; this.onend?.(); }
+    say(transcript: string, isFinal: boolean) {
+      this.onresult?.({ resultIndex: 0, results: [{ isFinal, 0: { transcript } }] });
+    }
+  }
+
+  beforeEach(() => {
+    FakeRecognition.current = null;
+    (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition = FakeRecognition;
+  });
+
+  afterEach(() => {
+    delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+  });
+
+  it('o usuário escolhe entre digitar e falar: há um botão para ditar a anotação', () => {
+    renderView();
+
+    expect(screen.getByRole('button', { name: 'Ditar por voz' })).toBeTruthy();
+    expect(screen.getByLabelText('Nova anotação')).toBeTruthy();
+  });
+
+  it('o que é falado entra no campo da anotação, frase após frase', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Ditar por voz' }));
+
+    act(() => FakeRecognition.current!.say('o diretor quer o relatório', true));
+    act(() => FakeRecognition.current!.say('toda segunda de manhã', true));
+
+    expect((screen.getByLabelText('Nova anotação') as HTMLTextAreaElement).value).toBe('o diretor quer o relatório toda segunda de manhã');
+  });
+
+  it('a fala entra depois do que já foi digitado', () => {
+    renderView();
+    fireEvent.change(screen.getByLabelText('Nova anotação'), { target: { value: 'Reunião com o diretor:' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ditar por voz' }));
+
+    act(() => FakeRecognition.current!.say('quer relatório semanal', true));
+
+    expect((screen.getByLabelText('Nova anotação') as HTMLTextAreaElement).value).toBe('Reunião com o diretor: quer relatório semanal');
+  });
+
+  it('enquanto ouve, mostra o botão de parar e o texto parcial', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Ditar por voz' }));
+
+    act(() => FakeRecognition.current!.say('o diretor quer', false));
+
+    expect(screen.getByRole('button', { name: 'Parar ditado' })).toBeTruthy();
+    expect(screen.getByText('Ouvindo: o diretor quer')).toBeTruthy();
+    expect((screen.getByLabelText('Nova anotação') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('parar o ditado volta o botão ao normal', () => {
+    renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Ditar por voz' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Parar ditado' }));
+
+    expect(screen.getByRole('button', { name: 'Ditar por voz' })).toBeTruthy();
+    expect(FakeRecognition.current!.started).toBe(false);
+  });
+
+  it('adicionar a anotação encerra o ditado e limpa o campo', () => {
+    const { onAdd } = renderView();
+    fireEvent.click(screen.getByRole('button', { name: 'Ditar por voz' }));
+    act(() => FakeRecognition.current!.say('ligar para o fornecedor', true));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar anotação' }));
+
+    expect(onAdd).toHaveBeenCalledWith({ text: 'ligar para o fornecedor', tags: [], stakeholderId: undefined });
+    expect(FakeRecognition.current!.started).toBe(false);
+    expect((screen.getByLabelText('Nova anotação') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('microfone bloqueado mostra o motivo, sem perder o que já foi digitado', () => {
+    renderView();
+    fireEvent.change(screen.getByLabelText('Nova anotação'), { target: { value: 'rascunho' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Ditar por voz' }));
+
+    act(() => FakeRecognition.current!.onerror?.({ error: 'not-allowed' }));
+
+    expect(screen.getByRole('alert').textContent).toMatch(/microfone/i);
+    expect((screen.getByLabelText('Nova anotação') as HTMLTextAreaElement).value).toBe('rascunho');
+  });
+
+  it('em navegador sem reconhecimento de voz, o botão fica desabilitado e explica', () => {
+    delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+    renderView();
+
+    const button = screen.getByRole('button', { name: 'Ditar por voz' }) as HTMLButtonElement;
+
+    expect(button.disabled).toBe(true);
+    expect(screen.getByText(/ditado por voz funciona no Chrome e no Edge/i)).toBeTruthy();
   });
 });
 
