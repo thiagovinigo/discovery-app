@@ -3,8 +3,7 @@ import {
   ChecklistItem,
   DiscoveryProject,
   MeetingSession,
-  TranscriptSegment,
-  UserFlowStep
+  TranscriptSegment
 } from './types/discovery';
 import { storageService } from './services/storageService';
 import { geminiService } from './services/geminiService';
@@ -12,6 +11,7 @@ import {
   appendSegment,
   appendSegments,
   applyLiveAnalysis,
+  closeMeeting,
   editMindMap,
   getActiveSessionContext,
   markQuestionAsked,
@@ -71,7 +71,11 @@ import { POSpaceView } from './components/POSpaceView';
 import { AgentPanel } from './components/AgentPanel';
 import { LiveSessionsManager } from './components/LiveSessionsManager';
 import { ProductAuditView } from './components/ProductAuditView';
+import { TopicsPanel } from './components/TopicsPanel';
+import { MinutesPanel } from './components/MinutesPanel';
 import type { AppView } from './components/Sidebar';
+import { applySuggestions, assignSpeaker, suggestSpeakers } from './services/speakerService';
+import { withMinutes } from './services/minutesService';
 
 import {
   Radio,
@@ -80,12 +84,26 @@ import {
   Plus,
   Maximize2,
   Minimize2,
-  Keyboard
+  Keyboard,
+  Flag,
+  Layers,
+  FileText
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
+type RightTab = 'topics' | 'mindmap' | 'userflow' | 'minutes';
+
+/** Painéis ao lado da conversa: o que ela vai produzindo, na ordem em que o PO costuma usar. */
+const RIGHT_TABS: { id: RightTab; label: string; Icon: LucideIcon; count: (s: MeetingSession) => string }[] = [
+  { id: 'topics', label: 'Tópicos & Perguntas', Icon: Layers, count: s => `${s.liveQuestions.filter(q => !q.asked).length} a fazer` },
+  { id: 'mindmap', label: 'Mapa mental', Icon: GitBranch, count: s => `${s.mindMapNodes.length} nós` },
+  { id: 'userflow', label: 'Jornada', Icon: Workflow, count: s => `${s.userFlowSteps.length} etapas` },
+  { id: 'minutes', label: 'Ata', Icon: FileText, count: s => (s.minutes ? 'pronta' : 'a gerar') }
+];
 
 export const App: React.FC = () => {
   const [activeView, setActiveView] = useHashView();
-  const [activeRightTab, setActiveRightTab] = useState<'mindmap' | 'userflow'>('mindmap');
+  const [activeRightTab, setActiveRightTab] = useState<RightTab>('topics');
 
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -405,6 +423,9 @@ export const App: React.FC = () => {
     activeProject.sessions.find(s => s.id === activeProject.activeSessionId) ||
     activeProject.sessions[0];
 
+  // Pistas no texto sobre quem falou ("aqui é a Ana"); o usuário aceita uma a uma ou todas
+  const speakerSuggestions = currentSession ? suggestSpeakers(currentSession, activeProject.stakeholders ?? []) : [];
+
   // Handler para Relatar Bug de Produção a partir de fala do cliente
   const handleReportBug = (seg: TranscriptSegment) => {
     if (!activeProject || !currentSession) return;
@@ -690,7 +711,7 @@ export const App: React.FC = () => {
     e.target.value = '';
   };
 
-  const handleEditMap = (edit: (session: MeetingSession) => MeetingSession) => {
+  const handleEditSession = (edit: (session: MeetingSession) => MeetingSession) => {
     if (!currentSession) return;
     editMindMap(activeProject.id, currentSession.id, edit);
     refresh();
@@ -701,6 +722,30 @@ export const App: React.FC = () => {
     refreshMindMap(activeProject.id, currentSession.id);
     refresh();
     showNotice('success', 'Mapa mental atualizado com o que foi dito até agora.');
+  };
+
+  const handleAssignSpeaker = (segmentId: string, stakeholderId: string | undefined) =>
+    handleEditSession(s => assignSpeaker(s, segmentId, stakeholderId));
+
+  const handleApplySpeakerSuggestions = () => {
+    const stakeholders = activeProject.stakeholders ?? [];
+    handleEditSession(s => applySuggestions(s, suggestSpeakers(s, stakeholders)));
+    showNotice('success', 'Falas identificadas pelo que foi dito. Confira e ajuste se algo estiver errado.');
+  };
+
+  const handleGenerateMinutes = () => {
+    handleEditSession(s => withMinutes(s, activeProject.stakeholders ?? []));
+    showNotice('success', 'Ata gerada a partir da conversa.');
+  };
+
+  // Encerra: para a gravação, refaz mapa e jornada com tudo o que foi dito e gera a ata
+  const handleEndMeeting = () => {
+    if (!currentSession) return;
+    if (isRecording) handleStopRecording();
+    closeMeeting(activeProject.id, currentSession.id);
+    refresh();
+    setActiveRightTab('minutes');
+    showNotice('success', 'Reunião encerrada: mapa, jornada e ata atualizados. Revise e gere o backlog se fizer sentido.');
   };
 
   const handleRefreshJourney = () => {
@@ -904,47 +949,6 @@ export const App: React.FC = () => {
         {/* VIEW 1: LIVE ROOM */}
         {activeView === 'live_room' && currentSession && (
           <>
-          {/* Barra de Modo Foco e Atalhos Globais de UX */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <button
-                onClick={() => setIsFocusMode(prev => !prev)}
-                className="btn btn-secondary"
-                style={{
-                  padding: '5px 12px',
-                  fontSize: '0.74rem',
-                  fontWeight: 700,
-                  gap: '6px',
-                  background: isFocusMode ? 'rgba(99, 102, 241, 0.25)' : 'rgba(255, 255, 255, 0.05)',
-                  border: isFocusMode ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
-                  color: isFocusMode ? '#c4b5fd' : 'var(--text-main)'
-                }}
-                title="Oculta a barra lateral para dar 100% de tela à entrevista e ao prompter de perguntas (Atalho: Alt + F)"
-              >
-                {isFocusMode ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                {isFocusMode ? 'Sair do Modo Foco (Alt + F)' : 'Modo Foco / Cinema (Alt + F)'}
-              </button>
-
-              <button
-                onClick={() => setShowShortcutsHelp(prev => !prev)}
-                className="btn btn-ghost"
-                style={{ padding: '5px 8px', fontSize: '0.72rem', gap: '4px', color: 'var(--text-dim)' }}
-                title="Ver atalhos de teclado da reunião"
-              >
-                <Keyboard size={13} /> Atalhos
-              </button>
-            </div>
-
-            {showShortcutsHelp && (
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', gap: '12px', alignItems: 'center', background: 'rgba(15, 23, 42, 0.8)', padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
-                <span><kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>Espaço</kbd> Gravar/Pausar</span>
-                <span><kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>Ctrl + M</kbd> Marcar Pergunta</span>
-                <span><kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>Alt + F</kbd> Modo Foco</span>
-              </div>
-            )}
-          </div>
-
-          {/* Gerenciador de Salas de Reunião: Abas, Seleção, Criação e Visualização */}
           <LiveSessionsManager
             project={activeProject}
             activeSession={currentSession}
@@ -953,39 +957,56 @@ export const App: React.FC = () => {
             onRenameSession={handleRenameSession}
           />
 
-          <SessionPeopleBar
-            stakeholders={activeProject.stakeholders ?? []}
-            participantIds={currentSession.participantIds ?? []}
-            currentSpeakerId={currentSession.currentSpeakerId}
-            onChangeParticipants={(ids) => {
-              setSessionParticipants(activeProject.id, currentSession.id, ids);
-              refresh();
-            }}
-            onChangeSpeaker={(id) => {
-              setCurrentSpeaker(activeProject.id, currentSession.id, id);
-              refresh();
-            }}
-          />
+          {/* Barra de controle fixa: gravar, encerrar e modo foco ficam sempre à mão */}
+          <div style={{ position: 'sticky', top: 0, zIndex: 20, margin: '0 -20px 10px', padding: '6px 20px 8px', background: 'var(--bg-main)', borderBottom: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  onClick={() => setIsFocusMode(prev => !prev)}
+                  className="btn btn-secondary"
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    gap: '6px',
+                    background: isFocusMode ? 'rgba(99, 102, 241, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                    border: isFocusMode ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
+                    color: isFocusMode ? '#c4b5fd' : 'var(--text-main)'
+                  }}
+                  title="Oculta a barra lateral para dar 100% de tela à entrevista (Atalho: Alt + F)"
+                >
+                  {isFocusMode ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                  {isFocusMode ? 'Sair do Modo Foco' : 'Modo Foco'}
+                </button>
+                <button
+                  onClick={() => setShowShortcutsHelp(prev => !prev)}
+                  className="btn btn-ghost"
+                  style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px', color: 'var(--text-dim)' }}
+                  title="Ver atalhos de teclado da reunião"
+                >
+                  <Keyboard size={13} /> Atalhos
+                </button>
+              </div>
 
-          <SessionAgendaCard session={currentSession} />
+              <button
+                className="btn btn-primary"
+                style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '6px' }}
+                disabled={currentSession.rawTranscript.length === 0}
+                onClick={handleEndMeeting}
+                title="Para a gravação, atualiza mapa e jornada e gera a ata com decisões, ações e perguntas em aberto"
+              >
+                <Flag size={13} /> Encerrar reunião
+              </button>
+            </div>
 
-          <AssistantPanel
-            session={currentSession}
-            busy={isAssistantBusy}
-            onChangeType={(type) => handleChangeSessionType(currentSession.id, type)}
-            onToggle={(enabled) => handleToggleAssistant(currentSession.id, enabled)}
-            onRunNow={() => handleRunAssistantNow(currentSession.id)}
-          />
+            {showShortcutsHelp && (
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '6px' }}>
+                <span><kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>Espaço</kbd> Gravar/Pausar</span>
+                <span><kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>Ctrl + M</kbd> Marcar Pergunta</span>
+                <span><kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>Alt + F</kbd> Modo Foco</span>
+              </div>
+            )}
 
-          <SessionClosingPanel
-            key={currentSession.id}
-            savedNote={closingOf(activeProject.notes ?? [], currentSession.id)}
-            onSave={handleSaveClosing}
-            onReviewBacklog={handleGenerateBacklogWithAI}
-            isGenerating={isGeneratingBacklog}
-          />
-
-          <div style={{ margin: '0 -20px' }}>
             <AudioCaptureBar
               isRecording={isRecording}
               onStartRecording={handleStartRecording}
@@ -1003,6 +1024,44 @@ export const App: React.FC = () => {
             />
           </div>
 
+          {/* Preparação da sala: aberta antes da conversa, recolhe sozinha quando a primeira fala chega */}
+          <details key={`${currentSession.id}:${currentSession.rawTranscript.length > 0}`} open={currentSession.rawTranscript.length === 0} style={{ marginBottom: '10px' }}>
+            <summary style={{ cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', padding: '4px 0' }}>
+              Preparação da sala: pessoas, pauta, assistente e fechamento
+            </summary>
+            <SessionPeopleBar
+              stakeholders={activeProject.stakeholders ?? []}
+              participantIds={currentSession.participantIds ?? []}
+              currentSpeakerId={currentSession.currentSpeakerId}
+              onChangeParticipants={(ids) => {
+                setSessionParticipants(activeProject.id, currentSession.id, ids);
+                refresh();
+              }}
+              onChangeSpeaker={(id) => {
+                setCurrentSpeaker(activeProject.id, currentSession.id, id);
+                refresh();
+              }}
+            />
+
+            <SessionAgendaCard session={currentSession} />
+
+            <AssistantPanel
+              session={currentSession}
+              busy={isAssistantBusy}
+              onChangeType={(type) => handleChangeSessionType(currentSession.id, type)}
+              onToggle={(enabled) => handleToggleAssistant(currentSession.id, enabled)}
+              onRunNow={() => handleRunAssistantNow(currentSession.id)}
+            />
+
+            <SessionClosingPanel
+              key={currentSession.id}
+              savedNote={closingOf(activeProject.notes ?? [], currentSession.id)}
+              onSave={handleSaveClosing}
+              onReviewBacklog={handleGenerateBacklogWithAI}
+              isGenerating={isGeneratingBacklog}
+            />
+          </details>
+
           {/* Input oculto para importação rápida via Empty State */}
           <input
             ref={liveFileInputRef}
@@ -1012,11 +1071,15 @@ export const App: React.FC = () => {
             style={{ display: 'none' }}
           />
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.1fr)', gap: '16px', height: 'calc(100vh - 240px)', minHeight: '560px', maxHeight: '820px' }}>
-            {/* Left Column: Transcription + Question Prompter */}
-            <div style={{ display: 'grid', gridTemplateRows: '1.05fr 1fr', gap: '14px', height: '100%', minHeight: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.25fr)', gap: '16px', height: 'calc(100vh - 210px)', minHeight: '560px' }}>
+            {/* Esquerda: a conversa, com quem falou em cada fala */}
+            <div style={{ height: '100%', minHeight: 0 }}>
               <LiveTranscriptionView
-                segments={currentSession?.rawTranscript || []}
+                segments={currentSession.rawTranscript}
+                stakeholders={activeProject.stakeholders ?? []}
+                onAssignSpeaker={handleAssignSpeaker}
+                speakerSuggestions={speakerSuggestions}
+                onApplySuggestions={handleApplySpeakerSuggestions}
                 onManualNoteSubmit={handleIncomingTranscript}
                 onActionStartMic={() => handleStartRecording('mic')}
                 onActionImportFile={() => liveFileInputRef.current?.click()}
@@ -1025,83 +1088,81 @@ export const App: React.FC = () => {
                 onClearTranscript={handleClearCurrentSessionTranscript}
                 isAnalyzing={isAnalyzingLive}
               />
-              <LiveQuestionPrompter
-                questions={currentSession?.liveQuestions || []}
-                onMarkAsked={handleMarkQuestionAsked}
-                onTriggerAnalysis={handleAnalyzeSessionWithAI}
-                isAnalyzing={isAnalyzingLive}
-              />
             </div>
 
-            {/* Right Column: Mind Map or User Flow Tabs */}
+            {/* Direita: o que a conversa vai produzindo */}
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-              <div style={{ display: 'flex', gap: '6px', marginBottom: '8px' }}>
-                <button
-                  onClick={() => setActiveRightTab('mindmap')}
-                  style={{
-                    padding: '5px 12px',
-                    borderRadius: '8px',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    background: activeRightTab === 'mindmap' ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255,255,255,0.05)',
-                    color: activeRightTab === 'mindmap' ? '#c4b5fd' : 'var(--text-muted)',
-                    border: activeRightTab === 'mindmap' ? '1px solid rgba(139, 92, 246, 0.4)' : '1px solid transparent',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}
-                >
-                  <GitBranch size={13} />
-                  Mapa Mental
-                  <span style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '999px', background: 'rgba(255,255,255,0.1)' }}>
-                    {currentSession?.mindMapNodes.length || 0} nós
-                  </span>
-                </button>
-
-                <button
-                  onClick={() => setActiveRightTab('userflow')}
-                  style={{
-                    padding: '5px 12px',
-                    borderRadius: '8px',
-                    fontSize: '0.78rem',
-                    fontWeight: 700,
-                    background: activeRightTab === 'userflow' ? 'rgba(6, 182, 212, 0.25)' : 'rgba(255,255,255,0.05)',
-                    color: activeRightTab === 'userflow' ? '#67e8f9' : 'var(--text-muted)',
-                    border: activeRightTab === 'userflow' ? '1px solid rgba(6, 182, 212, 0.4)' : '1px solid transparent',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '5px'
-                  }}
-                >
-                  <Workflow size={13} />
-                  Fluxo do Usuário
-                  <span style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '999px', background: 'rgba(255,255,255,0.1)' }}>
-                    {currentSession?.userFlowSteps.length || 0} etapas
-                  </span>
-                </button>
+              <div role="tablist" aria-label="Painéis da reunião" style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                {RIGHT_TABS.map(({ id, label, Icon, count }) => (
+                  <button
+                    key={id}
+                    role="tab"
+                    aria-selected={activeRightTab === id}
+                    onClick={() => setActiveRightTab(id)}
+                    style={{
+                      padding: '5px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.78rem',
+                      fontWeight: 700,
+                      background: activeRightTab === id ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255,255,255,0.05)',
+                      color: activeRightTab === id ? '#c4b5fd' : 'var(--text-muted)',
+                      border: activeRightTab === id ? '1px solid rgba(139, 92, 246, 0.4)' : '1px solid transparent',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '5px'
+                    }}
+                  >
+                    <Icon size={13} />
+                    {label}
+                    <span style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '999px', background: 'rgba(255,255,255,0.1)' }}>
+                      {count(currentSession)}
+                    </span>
+                  </button>
+                ))}
               </div>
 
-              <div style={{ flex: 1, minHeight: 0 }}>
-                {activeRightTab === 'mindmap' ? (
+              <div role="tabpanel" style={{ flex: 1, minHeight: 0, overflowY: activeRightTab === 'topics' ? 'auto' : 'hidden' }}>
+                {activeRightTab === 'topics' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <TopicsPanel session={currentSession} />
+                    <div style={{ minHeight: '340px' }}>
+                      <LiveQuestionPrompter
+                        questions={currentSession.liveQuestions}
+                        onMarkAsked={handleMarkQuestionAsked}
+                        onTriggerAnalysis={handleAnalyzeSessionWithAI}
+                        isAnalyzing={isAnalyzingLive}
+                      />
+                    </div>
+                  </div>
+                )}
+                {activeRightTab === 'mindmap' && (
                   <MindMapCanvas
-                    nodes={currentSession?.mindMapNodes || []}
-                    onRename={(id, label) => handleEditMap(s => renameNode(s, id, label))}
-                    onAddChild={(parentId, label) => handleEditMap(s => addChildNode(s, parentId, label))}
-                    onDelete={id => handleEditMap(s => deleteNode(s, id))}
+                    nodes={currentSession.mindMapNodes}
+                    onRename={(id, label) => handleEditSession(s => renameNode(s, id, label))}
+                    onAddChild={(parentId, label) => handleEditSession(s => addChildNode(s, parentId, label))}
+                    onDelete={id => handleEditSession(s => deleteNode(s, id))}
                     onRefresh={handleRefreshMap}
                     onTriggerAnalysis={handleAnalyzeSessionWithAI}
                     isAnalyzing={isAnalyzingLive}
                   />
-                ) : (
+                )}
+                {activeRightTab === 'userflow' && (
                   <UserFlowView
-                    steps={currentSession?.userFlowSteps || []}
-                    onAdd={data => handleEditMap(s => addStep(s, data))}
-                    onUpdate={(id, patch) => handleEditMap(s => updateStep(s, id, patch))}
-                    onRemove={id => handleEditMap(s => removeStep(s, id))}
-                    onMove={(id, dir) => handleEditMap(s => moveStep(s, id, dir))}
+                    steps={currentSession.userFlowSteps}
+                    onAdd={data => handleEditSession(s => addStep(s, data))}
+                    onUpdate={(id, patch) => handleEditSession(s => updateStep(s, id, patch))}
+                    onRemove={id => handleEditSession(s => removeStep(s, id))}
+                    onMove={(id, dir) => handleEditSession(s => moveStep(s, id, dir))}
                     onRefresh={handleRefreshJourney}
+                  />
+                )}
+                {activeRightTab === 'minutes' && (
+                  <MinutesPanel
+                    session={currentSession}
+                    onGenerate={handleGenerateMinutes}
+                    onGenerateBacklog={handleGenerateBacklogWithAI}
+                    isGeneratingBacklog={isGeneratingBacklog}
                   />
                 )}
               </div>

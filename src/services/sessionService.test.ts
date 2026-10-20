@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { storageService } from './storageService';
-import { applyLiveAnalysis, appendSegment, appendSegments, getActiveSessionContext, markQuestionAsked } from './sessionService';
+import { applyLiveAnalysis, appendSegment, appendSegments, closeMeeting, getActiveSessionContext, markQuestionAsked } from './sessionService';
 import type { AnalysisResponse } from './geminiService';
 import type { TranscriptSegment } from '../types/discovery';
 
@@ -230,5 +230,54 @@ describe('applyLiveAnalysis', () => {
 
   it('devolve undefined quando a sessão não existe', () => {
     expect(applyLiveAnalysis(projectId, 'nao-existe', emptyAnalysis())).toBeUndefined();
+  });
+
+  it('acrescenta perguntas pelo que a conversa ainda não respondeu em cada assunto', () => {
+    appendSegments(projectId, sessionId, [
+      { ...segment(1), text: 'O cadastro de fornecedores é um problema' },
+      { ...segment(2), text: 'O cadastro de fornecedores incomoda muito' },
+    ]);
+
+    applyLiveAnalysis(projectId, sessionId, emptyAnalysis());
+
+    const questions = currentSession().liveQuestions;
+    expect(questions.length).toBeGreaterThan(0);
+    expect(questions.every(q => q.question.toLowerCase().includes('cadastro'))).toBe(true);
+  });
+
+  it('não repete as perguntas por tópico numa segunda análise', () => {
+    appendSegments(projectId, sessionId, [
+      { ...segment(1), text: 'O cadastro de fornecedores é um problema' },
+      { ...segment(2), text: 'O cadastro de fornecedores incomoda muito' },
+    ]);
+
+    applyLiveAnalysis(projectId, sessionId, emptyAnalysis());
+    const once = currentSession().liveQuestions.length;
+    applyLiveAnalysis(projectId, sessionId, emptyAnalysis());
+
+    expect(currentSession().liveQuestions).toHaveLength(once);
+  });
+});
+
+describe('closeMeeting', () => {
+  const talkAbout = () => appendSegments(projectId, sessionId, [
+    { ...segment(1), text: 'Primeiro eu baixo o extrato do banco' },
+    { ...segment(2), text: 'Depois confiro cada linha, a fórmula quebra toda semana' },
+    { ...segment(3), text: 'Ficou decidido que vamos adotar a conciliação automática' },
+  ]);
+
+  it('gera a ata e atualiza mapa e jornada com o que foi dito', () => {
+    talkAbout();
+
+    closeMeeting(projectId, sessionId);
+
+    const session = currentSession();
+    expect(session.minutes?.decisions).toHaveLength(1);
+    expect(session.userFlowSteps.length).toBe(2);
+    expect(session.mindMapNodes.some(n => n.type === 'topic')).toBe(true);
+  });
+
+  it('devolve undefined quando a sessão não existe', () => {
+    expect(closeMeeting(projectId, 'nao-existe')).toBeUndefined();
   });
 });

@@ -253,6 +253,19 @@ export interface DecisionLogEntry {
   status: 'approved' | 'superseded' | 'revisiting';
 }
 
+/** Ata da reunião: o que foi tratado, decidido e combinado. Gerada da conversa e editável antes de exportar. */
+export interface MeetingMinutes {
+  generatedAt: string;
+  participants: string[];
+  summary: string;
+  topics: { title: string; statements: { speaker: string; text: string; timestamp: string }[] }[];
+  decisions: { text: string; speaker: string; timestamp: string }[];
+  actionItems: { item: string; owner: string; deadline: string }[];
+  openQuestions: string[];
+  painPoints: string[];
+  jobs: string[];
+}
+
 export interface MeetingSession {
   id: string;
   title: string;
@@ -285,6 +298,8 @@ export interface MeetingSession {
   mindMapHiddenIds?: string[];
   /** Etapas da jornada tiradas da conversa que o usuário apagou; a análise não as traz de volta. */
   userFlowHiddenIds?: string[];
+  /** Ata gerada ao encerrar (ou quando o usuário pede). */
+  minutes?: MeetingMinutes;
   type?: MeetingType;
   assistant?: AssistantState;
 }

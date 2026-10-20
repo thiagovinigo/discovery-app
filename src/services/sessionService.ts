@@ -1,6 +1,7 @@
 import { storageService } from './storageService';
 import type { AnalysisResponse } from './geminiService';
 import { syncJourney } from './journeyService';
+import { withMinutes } from './minutesService';
 import { syncMindMap } from './mindMapService';
 import { suggestTopicQuestions } from './topicService';
 import type { DiscoveryProject, MeetingSession, TranscriptSegment } from '../types/discovery';
@@ -70,6 +71,17 @@ function mergeAnalysis(session: MeetingSession, project: DiscoveryProject, analy
   };
   const stakeholders = project.stakeholders ?? [];
   return syncJourney(syncMindMap(withQuestions, project.name, stakeholders), stakeholders);
+}
+
+/**
+ * Encerra a reunião: refaz mapa e jornada com tudo o que foi dito e gera a ata. Não chama IA e não apaga nada;
+ * o backlog continua sendo gerado à parte, pelo painel de revisão.
+ */
+export function closeMeeting(projectId: string, sessionId: string): DiscoveryProject | undefined {
+  return updateSession(projectId, sessionId, (s, p) => {
+    const stakeholders = p.stakeholders ?? [];
+    return withMinutes(syncJourney(syncMindMap(s, p.name, stakeholders), stakeholders), stakeholders);
+  });
 }
 
 /** Refaz a jornada com o que a conversa tem agora, sem chamar IA. */

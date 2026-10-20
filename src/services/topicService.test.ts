@@ -144,6 +144,22 @@ describe('suggestTopicQuestions', () => {
     expect(again.some(q => q.question.toLowerCase() === first.question.toLowerCase())).toBe(false);
   });
 
+  it('enquanto há perguntas pendentes de um assunto, não acrescenta outras dele (a lista não incha a cada análise)', () => {
+    const pending = suggestTopicQuestions(topicSession());
+    expect(pending).toHaveLength(2);
+
+    expect(suggestTopicQuestions(topicSession(pending))).toEqual([]);
+  });
+
+  it('depois que as pendentes foram feitas, traz as próximas lacunas do assunto', () => {
+    const asked = suggestTopicQuestions(topicSession()).map(q => ({ ...q, asked: true }));
+
+    const next = suggestTopicQuestions(topicSession(asked));
+
+    expect(next.length).toBeGreaterThan(0);
+    expect(next.every(q => !asked.some(a => a.id === q.id))).toBe(true);
+  });
+
   it('as perguntas têm ids estáveis, para a sala poder juntar sem duplicar', () => {
     expect(suggestTopicQuestions(topicSession()).map(q => q.id)).toEqual(suggestTopicQuestions(topicSession()).map(q => q.id));
   });

@@ -163,9 +163,12 @@ const QUESTION_PLAN: { dimension: Dimension; category: LiveQuestionSuggestion['c
 export function suggestTopicQuestions(session: MeetingSession): LiveQuestionSuggestion[] {
   const known = new Set(session.liveQuestions.flatMap(q => [q.id, plain(q.question).trim()]));
   const suggestions: LiveQuestionSuggestion[] = [];
+  const pendingOf = (prefix: string): number => session.liveQuestions.filter(q => !q.asked && q.id.startsWith(prefix)).length;
+  const pendingTotal = pendingOf('tq-');
 
   for (const topic of [...extractTopics(session)].sort((a, b) => b.mentions - a.mentions)) {
-    let forTopic = 0;
+    // Perguntas deste assunto ainda por fazer contam no limite: a lista só cresce depois que o PO pergunta
+    let forTopic = pendingOf(`tq-${topic.id}-`);
     for (const step of QUESTION_PLAN) {
       if (forTopic >= MAX_QUESTIONS_PER_TOPIC) break;
       if (topic.coverage[step.dimension]) continue;
@@ -176,5 +179,5 @@ export function suggestTopicQuestions(session: MeetingSession): LiveQuestionSugg
       forTopic++;
     }
   }
-  return suggestions.slice(0, MAX_QUESTIONS);
+  return suggestions.slice(0, Math.max(0, MAX_QUESTIONS - pendingTotal));
 }

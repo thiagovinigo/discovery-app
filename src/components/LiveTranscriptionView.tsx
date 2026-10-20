@@ -1,9 +1,16 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { TranscriptSegment } from '../types/discovery';
+import { Stakeholder, TranscriptSegment } from '../types/discovery';
+import type { SpeakerSuggestion } from '../services/speakerService';
 import { MessageSquare, User, Send, Flame, Lightbulb, Mic, Upload, Edit3, Bug, Check, Sparkles, Trash2 } from 'lucide-react';
 
 interface LiveTranscriptionViewProps {
   segments: TranscriptSegment[];
+  /** Pessoas cadastradas; com elas cada fala pode ser atribuída a quem falou. */
+  stakeholders?: Stakeholder[];
+  onAssignSpeaker?: (segmentId: string, stakeholderId: string | undefined) => void;
+  /** Pistas do texto sobre quem falou ("aqui é a Ana"), para o usuário aceitar. */
+  speakerSuggestions?: SpeakerSuggestion[];
+  onApplySuggestions?: () => void;
   onManualNoteSubmit: (speaker: 'Entrevistador (PM)' | 'Usuário / Stakeholder', text: string) => void;
   onActionStartMic?: () => void;
   onActionImportFile?: () => void;
@@ -15,6 +22,10 @@ interface LiveTranscriptionViewProps {
 
 export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
   segments,
+  stakeholders = [],
+  onAssignSpeaker,
+  speakerSuggestions = [],
+  onApplySuggestions,
   onManualNoteSubmit,
   onActionStartMic,
   onActionImportFile,
@@ -42,12 +53,12 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
     setInputText('');
   };
 
-  const handlePreFillNote = (sample: string) => {
-    setInputText(sample);
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
+  const focusNoteInput = () => {
+    inputRef.current?.focus();
   };
+
+  const suggestionFor = (segmentId: string) => speakerSuggestions.find(s => s.segmentId === segmentId);
+  const nameOf = (id: string | undefined) => stakeholders.find(s => s.id === id)?.name;
 
   const handleBugClick = (seg: TranscriptSegment) => {
     if (onReportBug) {
@@ -115,6 +126,15 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
         </div>
       </div>
 
+      {speakerSuggestions.length > 0 && onApplySuggestions && (
+        <div role="status" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '8px', padding: '6px 10px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.12)', border: '1px solid rgba(99, 102, 241, 0.35)', fontSize: '0.74rem' }}>
+          <span>{speakerSuggestions.length} {speakerSuggestions.length === 1 ? 'fala pode' : 'falas podem'} ser identificadas pelo que foi dito.</span>
+          <button type="button" className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: '0.72rem' }} onClick={onApplySuggestions}>
+            Aplicar sugestões
+          </button>
+        </div>
+      )}
+
       {/* Transcript Stream */}
       <div
         ref={scrollRef}
@@ -171,7 +191,7 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
               {/* Card 2: Anotação rápida */}
               <button
                 type="button"
-                onClick={() => handlePreFillNote('Nossa maior dor hoje é que o fechamento manual leva 4 dias inteiros.')}
+                onClick={focusNoteInput}
                 className="glass-panel"
                 style={{
                   padding: '16px 12px',
@@ -243,8 +263,29 @@ export const LiveTranscriptionView: React.FC<LiveTranscriptionViewProps> = ({
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', alignSelf: isPM ? 'flex-end' : 'flex-start' }}>
                   <User size={12} color={isPM ? 'var(--primary)' : 'var(--accent-cyan)'} />
                   <span style={{ fontSize: '0.72rem', fontWeight: 700, color: isPM ? '#a5b4fc' : '#67e8f9' }}>
-                    {seg.speaker}
+                    {nameOf(seg.speakerStakeholderId) ?? seg.speaker}
                   </span>
+                  {onAssignSpeaker && stakeholders.length > 0 && (
+                    <select
+                      aria-label="Quem falou"
+                      value={seg.speakerStakeholderId ?? ''}
+                      onChange={e => onAssignSpeaker(seg.id, e.target.value || undefined)}
+                      style={{ fontSize: '0.66rem', padding: '1px 3px', borderRadius: '4px', border: '1px solid var(--border-subtle)', background: 'rgba(15, 23, 42, 0.9)', color: 'var(--text-muted)', maxWidth: '120px' }}
+                    >
+                      <option value="">Sem identificar</option>
+                      {stakeholders.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  )}
+                  {onAssignSpeaker && suggestionFor(seg.id) && (
+                    <button
+                      type="button"
+                      onClick={() => onAssignSpeaker(seg.id, suggestionFor(seg.id)!.stakeholderId)}
+                      title={suggestionFor(seg.id)!.reason}
+                      style={{ fontSize: '0.63rem', padding: '1px 6px', borderRadius: '4px', border: '1px solid rgba(99,102,241,0.5)', background: 'rgba(99,102,241,0.15)', color: '#c4b5fd', cursor: 'pointer' }}
+                    >
+                      Aceitar: {nameOf(suggestionFor(seg.id)!.stakeholderId)}
+                    </button>
+                  )}
                   <span style={{ fontSize: '0.68rem', color: 'var(--text-dim)' }}>
                     {seg.timestamp}
                   </span>
