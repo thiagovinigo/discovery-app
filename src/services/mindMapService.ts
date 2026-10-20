@@ -31,7 +31,7 @@ export const NODE_COLORS: Record<MindMapNode['type'], string> = {
 const norm = (text: string): string => plain(text).trim();
 
 /** Corta no limite sem partir palavra e marca com reticências. */
-function shorten(text: string): string {
+export function shorten(text: string): string {
   const clean = text.replace(/\s+/g, ' ').trim();
   if (clean.length <= LABEL_MAX) return clean;
   const cut = clean.slice(0, LABEL_MAX);

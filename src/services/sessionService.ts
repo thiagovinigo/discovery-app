@@ -1,5 +1,6 @@
 import { storageService } from './storageService';
 import type { AnalysisResponse } from './geminiService';
+import { syncJourney } from './journeyService';
 import { syncMindMap } from './mindMapService';
 import { suggestTopicQuestions } from './topicService';
 import type { DiscoveryProject, MeetingSession, TranscriptSegment } from '../types/discovery';
@@ -67,7 +68,13 @@ function mergeAnalysis(session: MeetingSession, project: DiscoveryProject, analy
     ...merged,
     liveQuestions: [...suggestTopicQuestions(merged), ...merged.liveQuestions]
   };
-  return syncMindMap(withQuestions, project.name, project.stakeholders ?? []);
+  const stakeholders = project.stakeholders ?? [];
+  return syncJourney(syncMindMap(withQuestions, project.name, stakeholders), stakeholders);
+}
+
+/** Refaz a jornada com o que a conversa tem agora, sem chamar IA. */
+export function refreshJourney(projectId: string, sessionId: string): DiscoveryProject | undefined {
+  return updateSession(projectId, sessionId, (s, p) => syncJourney(s, p.stakeholders ?? []));
 }
 
 /** Refaz o mapa mental com o que a sessão tem agora (transcrição, dores, JTBDs), sem chamar IA. */

@@ -71,6 +71,12 @@ export interface UserFlowStep {
   painPointDetected?: string;
   frictionLevel: 'smooth' | 'warning' | 'critical';
   notes?: string;
+  /** Fala do entrevistado que originou a etapa. */
+  quote?: string;
+  /** O que melhorar nesta etapa. */
+  opportunity?: string;
+  /** Etapa escrita ou editada pelo usuário: a análise não a sobrescreve. */
+  manual?: boolean;
 }
 
 export interface AcceptanceCriteria {
@@ -277,6 +283,8 @@ export interface MeetingSession {
   agenda?: string[];
   /** Ids de nós gerados automaticamente que o usuário apagou, para a análise não os recriar. */
   mindMapHiddenIds?: string[];
+  /** Etapas da jornada tiradas da conversa que o usuário apagou; a análise não as traz de volta. */
+  userFlowHiddenIds?: string[];
   type?: MeetingType;
   assistant?: AssistantState;
 }

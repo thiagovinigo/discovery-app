@@ -1,342 +1,196 @@
 import React, { useState } from 'react';
-import { UserFlowStep } from '../types/discovery';
-import {
-  Workflow,
-  Plus,
-  ArrowRight,
-  Flame,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
-  User,
-  Cpu
-} from 'lucide-react';
+import { ArrowLeft, ArrowRight, Flame, Lightbulb, Pencil, Plus, Quote, RefreshCw, Trash2, Workflow } from 'lucide-react';
+import type { UserFlowStep } from '../types/discovery';
+import type { StepPatch } from '../services/journeyService';
+
+type Friction = UserFlowStep['frictionLevel'];
 
 interface UserFlowViewProps {
   steps: UserFlowStep[];
-  onAddStep: (step: Omit<UserFlowStep, 'id'>) => void;
+  onAdd: (step: Pick<UserFlowStep, 'title' | 'actor' | 'frictionLevel'>) => void;
+  onUpdate: (stepId: string, patch: StepPatch) => void;
+  onRemove: (stepId: string) => void;
+  onMove: (stepId: string, direction: 'up' | 'down') => void;
+  /** Refaz a jornada com o que a conversa tem agora, sem IA. */
+  onRefresh?: () => void;
 }
 
-export const UserFlowView: React.FC<UserFlowViewProps> = ({
-  steps,
-  onAddStep
-}) => {
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [title, setTitle] = useState('');
-  const [actor, setActor] = useState('Usuário / Operador');
-  const [systemAction, setSystemAction] = useState('');
-  const [frictionLevel, setFrictionLevel] = useState<'smooth' | 'warning' | 'critical'>('warning');
-  const [painPoint, setPainPoint] = useState('');
+const FRICTION: Record<Friction, { label: string; color: string; height: number }> = {
+  smooth: { label: 'Fluido', color: '#10b981', height: 12 },
+  warning: { label: 'Atenção', color: '#f59e0b', height: 32 },
+  critical: { label: 'Crítico', color: '#f43f5e', height: 52 }
+};
 
-  const handleCreateStep = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
+const DEFAULT_ACTOR = 'Entrevistado';
+const CARD_WIDTH = 230;
+const CURVE_STEP = 60;
 
-    onAddStep({
-      stepNumber: steps.length + 1,
+const field: React.CSSProperties = {
+  width: '100%', padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--border-subtle)',
+  background: 'rgba(255,255,255,0.04)', color: 'var(--text-main)', fontSize: '0.76rem', boxSizing: 'border-box'
+};
+
+/** A linha que sobe onde a pessoa sofre e desce onde o caminho flui. */
+const FrictionCurve: React.FC<{ steps: UserFlowStep[] }> = ({ steps }) => {
+  if (steps.length < 2) return null;
+  const width = (steps.length - 1) * CURVE_STEP + 24;
+  const points = steps.map((s, i) => `${12 + i * CURVE_STEP},${64 - FRICTION[s.frictionLevel].height}`).join(' ');
+  return (
+    <svg aria-hidden="true" width={width} height={70} style={{ maxWidth: '100%' }}>
+      <polyline points={points} fill="none" stroke="rgba(255,255,255,0.35)" strokeWidth={2} />
+      {steps.map((s, i) => (
+        <circle key={s.id} cx={12 + i * CURVE_STEP} cy={64 - FRICTION[s.frictionLevel].height} r={5} fill={FRICTION[s.frictionLevel].color} />
+      ))}
+    </svg>
+  );
+};
+
+interface CardProps {
+  step: UserFlowStep;
+  isFirst: boolean;
+  isLast: boolean;
+  onUpdate: UserFlowViewProps['onUpdate'];
+  onRemove: UserFlowViewProps['onRemove'];
+  onMove: UserFlowViewProps['onMove'];
+}
+
+const StepCard: React.FC<CardProps> = ({ step, isFirst, isLast, onUpdate, onRemove, onMove }) => {
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [title, setTitle] = useState(step.title);
+  const [friction, setFriction] = useState<Friction>(step.frictionLevel);
+  const [pain, setPain] = useState(step.painPointDetected ?? '');
+  const [opportunity, setOpportunity] = useState(step.opportunity ?? '');
+  const tone = FRICTION[step.frictionLevel];
+
+  const save = () => {
+    onUpdate(step.id, {
       title: title.trim(),
-      actor: actor.trim(),
-      systemAction: systemAction.trim(),
-      frictionLevel,
-      painPointDetected: painPoint.trim() ? painPoint.trim() : undefined
+      frictionLevel: friction,
+      painPointDetected: pain.trim() || undefined,
+      opportunity: opportunity.trim() || undefined
     });
-
-    setTitle('');
-    setSystemAction('');
-    setPainPoint('');
-    setShowAddModal(false);
-  };
-
-  const getFrictionBadge = (level: UserFlowStep['frictionLevel']) => {
-    switch (level) {
-      case 'smooth':
-        return (
-          <span className="badge badge-emerald">
-            <CheckCircle2 size={12} /> Fluido
-          </span>
-        );
-      case 'warning':
-        return (
-          <span className="badge badge-amber">
-            <AlertCircle size={12} /> Fricção Moderada
-          </span>
-        );
-      case 'critical':
-        return (
-          <span className="badge badge-rose">
-            <XCircle size={12} /> Gargalo Crítico
-          </span>
-        );
-    }
+    setEditing(false);
   };
 
   return (
-    <div className="glass-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '440px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(6, 182, 212, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Workflow size={18} color="var(--accent-cyan)" />
-          </div>
-          <div>
-            <h3 style={{ fontSize: '0.95rem', fontWeight: 700 }}>Fluxo do Usuário & Processo Real</h3>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Mapeamento das etapas reveladas pelo entrevistado</span>
-          </div>
-        </div>
-
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="btn btn-secondary"
-          style={{ padding: '5px 12px', fontSize: '0.78rem', gap: '5px' }}
-        >
-          <Plus size={14} />
-          Adicionar Etapa
-        </button>
+    <li
+      aria-label={`Etapa ${step.stepNumber}: ${step.title}`}
+      style={{ listStyle: 'none', flex: `0 0 ${CARD_WIDTH}px`, padding: '10px 12px', borderRadius: '10px', border: `1px solid ${tone.color}66`, borderTop: `4px solid ${tone.color}`, background: 'rgba(255,255,255,0.03)', display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.76rem' }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '6px' }}>
+        <span style={{ color: 'var(--text-dim)', fontWeight: 700 }}>{step.stepNumber}</span>
+        <span style={{ color: tone.color, fontWeight: 700, fontSize: '0.7rem' }}>{tone.label}</span>
       </div>
 
-      {/* Steps Pipeline */}
-      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px', paddingRight: '6px' }}>
-        {steps.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '50px 20px', color: 'var(--text-dim)' }}>
-            <p style={{ fontSize: '0.85rem', marginBottom: '6px' }}>Nenhum fluxo mapeado ainda.</p>
-            <p style={{ fontSize: '0.75rem' }}>Ao ouvir o entrevistado descrever o processo ou iniciar uma simulação, as etapas aparecerão conectadas aqui.</p>
+      {editing ? (
+        <>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>Título da etapa
+            <input style={field} value={title} onChange={e => setTitle(e.target.value)} />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>Fricção
+            <select style={field} value={friction} onChange={e => setFriction(e.target.value as Friction)}>
+              {(Object.keys(FRICTION) as Friction[]).map(level => <option key={level} value={level}>{FRICTION[level].label}</option>)}
+            </select>
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>Dor percebida
+            <input style={field} value={pain} onChange={e => setPain(e.target.value)} />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>Oportunidade
+            <input style={field} value={opportunity} onChange={e => setOpportunity(e.target.value)} />
+          </label>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button className="btn btn-primary" style={{ padding: '4px 8px', fontSize: '0.72rem' }} disabled={!title.trim()} onClick={save}>Salvar etapa</button>
+            <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '0.72rem' }} onClick={() => setEditing(false)}>Cancelar</button>
           </div>
-        ) : (
-          steps.map((step, idx) => (
-            <React.Fragment key={step.id}>
-              <div
-                className="glass-card animate-slide-down"
-                style={{
-                  padding: '14px 16px',
-                  borderLeft: `4px solid ${
-                    step.frictionLevel === 'critical'
-                      ? 'var(--accent-rose)'
-                      : step.frictionLevel === 'warning'
-                      ? 'var(--accent-amber)'
-                      : 'var(--accent-emerald)'
-                  }`,
-                  position: 'relative'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{
-                      width: '24px',
-                      height: '24px',
-                      borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.1)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '0.75rem',
-                      fontWeight: 800,
-                      color: 'var(--text-main)'
-                    }}>
-                      {step.stepNumber}
-                    </span>
-                    <h4 style={{ fontSize: '0.92rem', fontWeight: 700 }}>{step.title}</h4>
-                  </div>
+        </>
+      ) : (
+        <>
+          <strong style={{ fontSize: '0.84rem', lineHeight: 1.3 }}>{step.title}</strong>
+          <span style={{ color: 'var(--text-muted)' }}>{step.actor}</span>
+          {step.painPointDetected && (
+            <p style={{ margin: 0, display: 'flex', gap: '5px', color: '#fda4af', lineHeight: 1.35 }}><Flame size={12} style={{ flexShrink: 0, marginTop: 2 }} />{step.painPointDetected}</p>
+          )}
+          {step.opportunity && (
+            <p style={{ margin: 0, display: 'flex', gap: '5px', color: '#c4b5fd', lineHeight: 1.35 }}><Lightbulb size={12} style={{ flexShrink: 0, marginTop: 2 }} />{step.opportunity}</p>
+          )}
+          {step.quote && (
+            <p style={{ margin: 0, display: 'flex', gap: '5px', color: 'var(--text-dim)', fontStyle: 'italic', lineHeight: 1.35 }}><Quote size={12} style={{ flexShrink: 0, marginTop: 2 }} />{step.quote}</p>
+          )}
+          <div style={{ display: 'flex', gap: '4px', marginTop: 'auto', flexWrap: 'wrap' }}>
+            <button className="btn btn-ghost" style={{ padding: '3px' }} aria-label="Mover para antes" disabled={isFirst} onClick={() => onMove(step.id, 'up')}><ArrowLeft size={13} /></button>
+            <button className="btn btn-ghost" style={{ padding: '3px' }} aria-label="Mover para depois" disabled={isLast} onClick={() => onMove(step.id, 'down')}><ArrowRight size={13} /></button>
+            <button className="btn btn-ghost" style={{ padding: '3px' }} aria-label="Editar etapa" onClick={() => setEditing(true)}><Pencil size={13} /></button>
+            {confirming ? (
+              <button className="btn btn-secondary" style={{ padding: '3px 6px', fontSize: '0.7rem', color: '#fda4af' }} aria-label="Confirmar: apagar etapa" onClick={() => { onRemove(step.id); setConfirming(false); }}>Apagar?</button>
+            ) : (
+              <button className="btn btn-ghost" style={{ padding: '3px', color: '#fda4af' }} aria-label="Apagar etapa" onClick={() => setConfirming(true)}><Trash2 size={13} /></button>
+            )}
+          </div>
+        </>
+      )}
+    </li>
+  );
+};
 
-                  {getFrictionBadge(step.frictionLevel)}
-                </div>
+export const UserFlowView: React.FC<UserFlowViewProps> = ({ steps, onAdd, onUpdate, onRemove, onMove, onRefresh }) => {
+  const [newTitle, setNewTitle] = useState('');
+  const critical = steps.filter(s => s.frictionLevel === 'critical').length;
+  const warning = steps.filter(s => s.frictionLevel === 'warning').length;
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', fontSize: '0.8rem', marginBottom: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
-                    <User size={13} color="var(--primary)" />
-                    <span><strong>Ator:</strong> {step.actor}</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)' }}>
-                    <Cpu size={13} color="var(--accent-cyan)" />
-                    <span><strong>Ação/Sistema:</strong> {step.systemAction}</span>
-                  </div>
-                </div>
+  const add = () => {
+    if (!newTitle.trim()) return;
+    onAdd({ title: newTitle.trim(), actor: DEFAULT_ACTOR, frictionLevel: 'smooth' });
+    setNewTitle('');
+  };
 
-                {step.painPointDetected && (
-                  <div style={{
-                    marginTop: '8px',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    background: 'rgba(244, 63, 94, 0.1)',
-                    border: '1px solid rgba(244, 63, 94, 0.25)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '0.78rem',
-                    color: '#fda4af'
-                  }}>
-                    <Flame size={14} color="var(--accent-rose)" />
-                    <span><strong>Ponto de Quebra:</strong> "{step.painPointDetected}"</span>
-                  </div>
-                )}
-              </div>
-
-              {idx < steps.length - 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', margin: '-4px 0' }}>
-                  <div style={{
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    <ArrowRight size={13} color="var(--text-dim)" style={{ transform: 'rotate(90deg)' }} />
-                  </div>
-                </div>
-              )}
-            </React.Fragment>
-          ))
+  return (
+    <div className="glass-panel" style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '320px', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Workflow size={18} color="var(--accent-cyan, #06b6d4)" />
+          <div>
+            <h3 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0 }}>Jornada do usuário</h3>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              <span>{critical} {critical === 1 ? 'crítica' : 'críticas'}</span> · <span>{warning} com atenção</span> · {steps.length} etapas
+            </span>
+          </div>
+        </div>
+        {onRefresh && (
+          <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }} onClick={onRefresh} title="Refaz a jornada com a sequência que o entrevistado contou, sem IA">
+            <RefreshCw size={12} /> Atualizar jornada
+          </button>
         )}
       </div>
 
-      {/* Add Step Modal */}
-      {showAddModal && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.7)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000
-        }}>
-          <div className="glass-panel animate-slide-down" style={{ width: '460px', padding: '20px' }}>
-            <h3 style={{ fontSize: '1.1rem', marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Workflow size={18} color="var(--accent-cyan)" />
-              Nova Etapa do Fluxo
-            </h3>
-            <form onSubmit={handleCreateStep}>
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>
-                  Título da Etapa
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: Conciliação de Centavos no Excel"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-subtle)',
-                    background: 'rgba(15, 23, 42, 0.9)',
-                    color: 'var(--text-main)',
-                    fontSize: '0.85rem'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>
-                    Ator Responsável
-                  </label>
-                  <input
-                    type="text"
-                    value={actor}
-                    onChange={(e) => setActor(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border-subtle)',
-                      background: 'rgba(15, 23, 42, 0.9)',
-                      color: 'var(--text-main)',
-                      fontSize: '0.85rem'
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>
-                    Nível de Fricção
-                  </label>
-                  <select
-                    value={frictionLevel}
-                    onChange={(e) => setFrictionLevel(e.target.value as any)}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border-subtle)',
-                      background: 'rgba(15, 23, 42, 0.9)',
-                      color: 'var(--text-main)',
-                      fontSize: '0.85rem'
-                    }}
-                  >
-                    <option value="smooth">Fluido (Sem problemas)</option>
-                    <option value="warning">Atrito Moderado (Retrabalho)</option>
-                    <option value="critical">Gargalo Crítico (Trava tudo)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>
-                  Ação do Sistema / Software
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Executa busca manual por linhas com divergência"
-                  value={systemAction}
-                  onChange={(e) => setSystemAction(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-subtle)',
-                    background: 'rgba(15, 23, 42, 0.9)',
-                    color: 'var(--text-main)',
-                    fontSize: '0.85rem'
-                  }}
-                />
-              </div>
-
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '4px', color: 'var(--text-muted)' }}>
-                  Dor ou Gargalo Específico (Opcional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: Lote de 200 lojas fica congelado"
-                  value={painPoint}
-                  onChange={(e) => setPainPoint(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    border: '1px solid var(--border-subtle)',
-                    background: 'rgba(15, 23, 42, 0.9)',
-                    color: 'var(--text-main)',
-                    fontSize: '0.85rem'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="btn btn-secondary"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                >
-                  Salvar Etapa
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {steps.length === 0 ? (
+        <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+          A jornada nasce quando o entrevistado conta o passo a passo: frases como “primeiro eu…, depois…, por fim…” viram etapas, com a fricção de cada uma. Você também pode adicionar etapas abaixo.
+        </p>
+      ) : (
+        <>
+          <FrictionCurve steps={steps} />
+          <ul role="list" style={{ margin: 0, padding: '0 0 6px', display: 'flex', gap: '10px', overflowX: 'auto', flex: 1, alignItems: 'stretch' }}>
+            {steps.map((step, i) => (
+              <StepCard key={`${step.id}:${step.title}:${step.frictionLevel}`} step={step} isFirst={i === 0} isLast={i === steps.length - 1} onUpdate={onUpdate} onRemove={onRemove} onMove={onMove} />
+            ))}
+          </ul>
+        </>
       )}
+
+      <div style={{ display: 'flex', gap: '6px' }}>
+        <input
+          aria-label="Nova etapa"
+          placeholder="Nova etapa da jornada"
+          value={newTitle}
+          onChange={e => setNewTitle(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') add(); }}
+          style={{ ...field, flex: 1 }}
+        />
+        <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.74rem', gap: '4px' }} disabled={!newTitle.trim()} onClick={add}>
+          <Plus size={12} /> Adicionar etapa
+        </button>
+      </div>
     </div>
   );
 };

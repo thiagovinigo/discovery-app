@@ -15,8 +15,10 @@ import {
   editMindMap,
   getActiveSessionContext,
   markQuestionAsked,
+  refreshJourney,
   refreshMindMap
 } from './services/sessionService';
+import { addStep, moveStep, removeStep, updateStep } from './services/journeyService';
 import { addChildNode, deleteNode, renameNode } from './services/mindMapService';
 import { useProjects } from './state/useProjects';
 import { NoticeToast } from './components/NoticeToast';
@@ -701,21 +703,11 @@ export const App: React.FC = () => {
     showNotice('success', 'Mapa mental atualizado com o que foi dito até agora.');
   };
 
-  const handleAddFlowStep = (stepData: Omit<UserFlowStep, 'id'>) => {
+  const handleRefreshJourney = () => {
     if (!currentSession) return;
-    const newStep: UserFlowStep = {
-      ...stepData,
-      id: 'step-' + Date.now()
-    };
-    const updatedSession = {
-      ...currentSession,
-      userFlowSteps: [...currentSession.userFlowSteps, newStep]
-    };
-    const updatedProj = {
-      ...activeProject,
-      sessions: activeProject.sessions.map(s => s.id === currentSession.id ? updatedSession : s)
-    };
-    saveProject(updatedProj);
+    refreshJourney(activeProject.id, currentSession.id);
+    refresh();
+    showNotice('success', 'Jornada atualizada com a sequência que foi contada até agora.');
   };
 
   const handleUpdateTaskStatus = (
@@ -1105,7 +1097,11 @@ export const App: React.FC = () => {
                 ) : (
                   <UserFlowView
                     steps={currentSession?.userFlowSteps || []}
-                    onAddStep={handleAddFlowStep}
+                    onAdd={data => handleEditMap(s => addStep(s, data))}
+                    onUpdate={(id, patch) => handleEditMap(s => updateStep(s, id, patch))}
+                    onRemove={id => handleEditMap(s => removeStep(s, id))}
+                    onMove={(id, dir) => handleEditMap(s => moveStep(s, id, dir))}
+                    onRefresh={handleRefreshJourney}
                   />
                 )}
               </div>
