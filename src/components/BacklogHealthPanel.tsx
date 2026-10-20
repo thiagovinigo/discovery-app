@@ -3,6 +3,7 @@ import { ShieldCheck } from 'lucide-react';
 import type { Epic } from '../types/discovery';
 import { contestedItems, validationSummary } from '../services/backlogItemService';
 import { verifyBacklog } from '../services/verificationService';
+import { findDuplicateStories } from '../services/backlogProposals';
 
 interface BacklogHealthPanelProps {
   epics: Epic[];
@@ -11,13 +12,18 @@ interface BacklogHealthPanelProps {
   /** O que a última mudança do backlog fez; o botão de desfazer só aparece com isto e com `onUndo`. */
   undoLabel?: string;
   onUndo?: () => void;
+  /** Abre o fatiamento de uma história grande demais. */
+  onSliceStory?: (storyId: string) => void;
+  /** Junta uma história duplicada (`dropId`) em outra (`keepId`). */
+  onMergeDuplicate?: (keepId: string, dropId: string) => void;
 }
 
 const cardStyle: React.CSSProperties = { padding: '8px 12px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.7)', border: '1px solid var(--border-subtle)' };
 
 /** No backlog: quanto dele já foi validado em reunião e quanto está pronto para dev, com as lacunas à vista. */
-export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, onFindEvidence, undoLabel, onUndo }) => {
+export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, onFindEvidence, undoLabel, onUndo, onSliceStory, onMergeDuplicate }) => {
   const validation = useMemo(() => validationSummary(epics), [epics]);
+  const duplicates = useMemo(() => (onMergeDuplicate ? findDuplicateStories(epics) : []), [epics, onMergeDuplicate]);
   const verification = useMemo(() => verifyBacklog(epics), [epics]);
   const contested = useMemo(() => contestedItems(epics), [epics]);
 
@@ -67,6 +73,19 @@ export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, o
         </p>
       )}
 
+      {duplicates.length > 0 && onMergeDuplicate && (
+        <ul aria-label="Histórias duplicadas" style={{ margin: 0, paddingLeft: '18px', fontSize: '0.8rem' }}>
+          {duplicates.map(d => (
+            <li key={`${d.keepId}-${d.dropId}`}>
+              {`Possível duplicada de "${d.title}" `}
+              <button type="button" className="btn btn-secondary" style={{ padding: '2px 10px', fontSize: '0.72rem' }} onClick={() => onMergeDuplicate(d.keepId, d.dropId)}>
+                {`Mesclar duplicada de "${d.title}"`}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       {contested.length > 0 && (
         <ul aria-label="Itens contestados" style={{ margin: 0, paddingLeft: '18px', fontSize: '0.8rem', color: '#fcd34d' }}>
           {contested.map(item => (
@@ -85,7 +104,14 @@ export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, o
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
             {withGaps.map(s => (
               <div key={s.storyId} role="group" aria-label={s.title} style={cardStyle}>
-                <strong style={{ fontSize: '0.82rem' }}>{s.title}</strong>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <strong style={{ fontSize: '0.82rem' }}>{s.title}</strong>
+                  {onSliceStory && s.gaps.some(g => g.code === 'too-big') && (
+                    <button type="button" className="btn btn-secondary" style={{ padding: '2px 10px', fontSize: '0.72rem' }} onClick={() => onSliceStory(s.storyId)}>
+                      {`Fatiar "${s.title}"`}
+                    </button>
+                  )}
+                </div>
                 <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px', fontSize: '0.76rem' }}>
                   {s.gaps.map((gap, i) => (
                     <li key={i} style={{ color: gap.severity === 'blocker' ? '#fda4af' : 'var(--text-muted)' }}>

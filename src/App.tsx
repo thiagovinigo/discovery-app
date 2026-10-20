@@ -26,9 +26,12 @@ import { BacklogHealthPanel } from './components/BacklogHealthPanel';
 import { BacklogReviewPanel } from './components/BacklogReviewPanel';
 import { EvidencePanel } from './components/EvidencePanel';
 import { changeWithSnapshot, lastSnapshot, undoLast } from './services/backlogHistoryService';
+import { StorySliceDialog } from './components/StorySliceDialog';
+import { sliceStory } from './services/slicingService';
+import type { StorySlicePart } from './services/slicingService';
 import { applyEvidence, suggestEvidence } from './services/evidenceService';
 import type { EvidenceSuggestion } from './services/evidenceService';
-import { applyProposals, planBacklogProposals } from './services/backlogProposals';
+import { applyProposals, mergeStories, planBacklogProposals } from './services/backlogProposals';
 import type { Proposal } from './services/backlogProposals';
 import { AgendaView } from './components/AgendaView';
 import { SessionAgendaCard } from './components/SessionAgendaCard';
@@ -87,6 +90,7 @@ export const App: React.FC = () => {
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [isAssistantBusy, setIsAssistantBusy] = useState(false);
   const [pendingReview, setPendingReview] = useState<{ projectId: string; sessionId?: string; proposals: Proposal[] } | null>(null);
+  const [slicingStoryId, setSlicingStoryId] = useState<string | null>(null);
   const [pendingEvidence, setPendingEvidence] = useState<{ projectId: string; suggestions: EvidenceSuggestion[] } | null>(null);
   const [notice, setNotice] = useState<{ type: 'error' | 'info' | 'success'; text: string } | null>(null);
 
@@ -708,6 +712,35 @@ export const App: React.FC = () => {
     saveProject(updatedProj);
   };
 
+  const slicingStory = slicingStoryId
+    ? activeProject.epics.flatMap(e => e.features).flatMap(f => f.userStories).find(s => s.id === slicingStoryId)
+    : undefined;
+
+  const handleSliceStory = (parts: StorySlicePart[]) => {
+    if (!slicingStory) return;
+    const at = new Date().toISOString();
+    try {
+      update(activeProject.id, p =>
+        changeWithSnapshot(p, `Fatiou "${slicingStory.title}" em ${parts.length} histórias`, at, q => ({
+          ...q,
+          epics: sliceStory(q.epics, slicingStory.id, parts, { at, sessionId: currentSession?.id })
+        }))
+      );
+      setSlicingStoryId(null);
+      showNotice('success', `História fatiada em ${parts.length}. Dá para desfazer no painel de saúde do backlog.`);
+    } catch (e: unknown) {
+      showNotice('error', e instanceof Error ? e.message : 'Não foi possível fatiar a história.');
+    }
+  };
+
+  const handleMergeDuplicate = (keepId: string, dropId: string) => {
+    const at = new Date().toISOString();
+    update(activeProject.id, p =>
+      changeWithSnapshot(p, 'Mesclou histórias duplicadas', at, q => ({ ...q, epics: mergeStories(q.epics, keepId, dropId, { at, sessionId: currentSession?.id }) }))
+    );
+    showNotice('success', 'Histórias mescladas. Dá para desfazer no painel de saúde do backlog.');
+  };
+
   const handleUndoBacklog = () => {
     const snapshot = lastSnapshot(activeProject);
     if (!snapshot) return;
@@ -1187,7 +1220,12 @@ export const App: React.FC = () => {
             onFindEvidence={handleFindEvidence}
             undoLabel={lastSnapshot(activeProject)?.label}
             onUndo={handleUndoBacklog}
+            onSliceStory={setSlicingStoryId}
+            onMergeDuplicate={handleMergeDuplicate}
           />
+          {slicingStory && (
+            <StorySliceDialog key={slicingStory.id} story={slicingStory} onConfirm={handleSliceStory} onCancel={() => setSlicingStoryId(null)} />
+          )}
           <DiscoveryToDoneView
             okrs={activeProject.okrs}
             epics={activeProject.epics}

@@ -85,6 +85,41 @@ describe('BacklogHealthPanel', () => {
     expect(screen.queryByRole('button', { name: /Desfazer/ })).toBeNull();
   });
 
+  it('história grande demais ganha o botão de fatiar, que avisa qual história', () => {
+    const onSliceStory = vi.fn();
+    render(<BacklogHealthPanel epics={[epicWith([story({ id: 's9', title: 'Gigante', storyPoints: 13 })])]} onSliceStory={onSliceStory} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fatiar "Gigante"' }));
+
+    expect(onSliceStory).toHaveBeenCalledWith('s9');
+  });
+
+  it('história de tamanho normal não tem o botão de fatiar', () => {
+    render(<BacklogHealthPanel epics={[epicWith([story({ storyPoints: 3, tasks: [] })])]} onSliceStory={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: /Fatiar/ })).toBeNull();
+  });
+
+  it('histórias duplicadas aparecem com o botão de mesclar', () => {
+    const onMergeDuplicate = vi.fn();
+    render(
+      <BacklogHealthPanel
+        epics={[epicWith([story({ id: 'a', title: 'Exportar relatório em PDF' }), story({ id: 'b', title: 'Exportar o relatório em PDF' })])]}
+        onMergeDuplicate={onMergeDuplicate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mesclar duplicada de "Exportar relatório em PDF"' }));
+
+    expect(onMergeDuplicate).toHaveBeenCalledWith('a', 'b');
+  });
+
+  it('sem duplicadas, não mostra a lista', () => {
+    render(<BacklogHealthPanel epics={[epicWith([story({ id: 'a', title: 'Um' }), story({ id: 'b', title: 'Outro assunto' })])]} onMergeDuplicate={vi.fn()} />);
+
+    expect(screen.queryByLabelText('Histórias duplicadas')).toBeNull();
+  });
+
   it('sem itens contestados nem lacunas, não mostra essas listas', () => {
     render(<BacklogHealthPanel epics={[epicWith([story()])]} />);
 
