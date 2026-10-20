@@ -6,12 +6,14 @@ import { verifyBacklog } from '../services/verificationService';
 
 interface BacklogHealthPanelProps {
   epics: Epic[];
+  /** Procura nas reuniões falas que confirmam ou contestam itens do backlog. */
+  onFindEvidence?: () => void;
 }
 
 const cardStyle: React.CSSProperties = { padding: '8px 12px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.7)', border: '1px solid var(--border-subtle)' };
 
 /** No backlog: quanto dele já foi validado em reunião e quanto está pronto para dev, com as lacunas à vista. */
-export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics }) => {
+export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, onFindEvidence }) => {
   const validation = useMemo(() => validationSummary(epics), [epics]);
   const verification = useMemo(() => verifyBacklog(epics), [epics]);
   const contested = useMemo(() => contestedItems(epics), [epics]);
@@ -40,6 +42,14 @@ export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics })
           </div>
         ))}
       </div>
+
+      {onFindEvidence && (
+        <div>
+          <button type="button" className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '0.78rem' }} onClick={onFindEvidence}>
+            Buscar evidências nas reuniões
+          </button>
+        </div>
+      )}
 
       {verification.stories.length > 0 && (
         <p style={{ margin: 0, fontSize: '0.84rem', fontWeight: 700 }}>

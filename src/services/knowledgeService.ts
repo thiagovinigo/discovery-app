@@ -25,7 +25,7 @@ export const plain = (text: string): string => text.normalize('NFD').replace(/[Ì
 const stem = (word: string): string => (word.length > 4 && word.endsWith('s') ? word.slice(0, -1) : word);
 
 /** Palavras que carregam sentido (sem acento, no singular, sem palavras comuns). */
-function tokens(text: string): string[] {
+export function tokens(text: string): string[] {
   return plain(text)
     .split(/[^a-z0-9]+/)
     .filter(word => word.length >= 3 && !STOP_WORDS.has(word))

@@ -24,6 +24,9 @@ import { createProjectActions } from './state/projectActions';
 import { NotesView } from './components/NotesView';
 import { BacklogHealthPanel } from './components/BacklogHealthPanel';
 import { BacklogReviewPanel } from './components/BacklogReviewPanel';
+import { EvidencePanel } from './components/EvidencePanel';
+import { applyEvidence, suggestEvidence } from './services/evidenceService';
+import type { EvidenceSuggestion } from './services/evidenceService';
 import { applyProposals, planBacklogProposals } from './services/backlogProposals';
 import type { Proposal } from './services/backlogProposals';
 import { AgendaView } from './components/AgendaView';
@@ -83,6 +86,7 @@ export const App: React.FC = () => {
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [isAssistantBusy, setIsAssistantBusy] = useState(false);
   const [pendingReview, setPendingReview] = useState<{ projectId: string; sessionId?: string; proposals: Proposal[] } | null>(null);
+  const [pendingEvidence, setPendingEvidence] = useState<{ projectId: string; suggestions: EvidenceSuggestion[] } | null>(null);
   const [notice, setNotice] = useState<{ type: 'error' | 'info' | 'success'; text: string } | null>(null);
 
   // New Specialist backlog features: Focus Mode & Informal Chat Mode
@@ -703,6 +707,24 @@ export const App: React.FC = () => {
     saveProject(updatedProj);
   };
 
+  const handleFindEvidence = () => {
+    const suggestions = suggestEvidence(activeProject);
+    if (suggestions.length === 0) {
+      setPendingEvidence(null);
+      showNotice('info', 'Nenhuma fala nova nas reuniões confirma ou contesta itens do backlog.');
+      return;
+    }
+    setPendingEvidence({ projectId: activeProject.id, suggestions });
+  };
+
+  const handleApplyEvidence = (acceptedIds: string[]) => {
+    if (!pendingEvidence) return;
+    const { suggestions } = pendingEvidence;
+    update(activeProject.id, p => ({ ...p, epics: applyEvidence(p.epics, suggestions, acceptedIds, new Date().toISOString()) }));
+    setPendingEvidence(null);
+    showNotice('success', `${acceptedIds.length} evidência(s) registrada(s) no backlog.`);
+  };
+
   const handleApplyReview = (acceptedIds: string[]) => {
     if (!pendingReview) return;
     const { proposals, sessionId } = pendingReview;
@@ -1138,7 +1160,15 @@ export const App: React.FC = () => {
               onDiscard={() => setPendingReview(null)}
             />
           )}
-          <BacklogHealthPanel epics={activeProject.epics} />
+          {pendingEvidence && pendingEvidence.projectId === activeProject.id && (
+            <EvidencePanel
+              key={pendingEvidence.suggestions.map(s => s.id).join('|')}
+              suggestions={pendingEvidence.suggestions}
+              onApply={handleApplyEvidence}
+              onDiscard={() => setPendingEvidence(null)}
+            />
+          )}
+          <BacklogHealthPanel epics={activeProject.epics} onFindEvidence={handleFindEvidence} />
           <DiscoveryToDoneView
             okrs={activeProject.okrs}
             epics={activeProject.epics}

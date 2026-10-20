@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { BacklogHealthPanel } from './BacklogHealthPanel';
 import { recordEvidence } from '../services/backlogItemService';
 import type { Epic, UserStory } from '../types/discovery';
@@ -59,6 +59,18 @@ describe('BacklogHealthPanel', () => {
     expect(within(list).getByText(/Exportar PDF/)).toBeTruthy();
     expect(within(list).getByText(/Ninguém usa isso/)).toBeTruthy();
     expect(within(list).getByText(/Kickoff/)).toBeTruthy();
+  });
+
+  it('o botão de buscar evidências só aparece quando a tela oferece essa ação', () => {
+    const onFindEvidence = vi.fn();
+    render(<BacklogHealthPanel epics={[epicWith([story()])]} onFindEvidence={onFindEvidence} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar evidências nas reuniões' }));
+    expect(onFindEvidence).toHaveBeenCalled();
+
+    cleanup();
+    render(<BacklogHealthPanel epics={[epicWith([story()])]} />);
+    expect(screen.queryByRole('button', { name: 'Buscar evidências nas reuniões' })).toBeNull();
   });
 
   it('sem itens contestados nem lacunas, não mostra essas listas', () => {
