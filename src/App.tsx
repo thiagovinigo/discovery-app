@@ -23,6 +23,9 @@ import { InterviewView } from './components/InterviewView';
 import { createProjectActions } from './state/projectActions';
 import { NotesView } from './components/NotesView';
 import { BacklogHealthPanel } from './components/BacklogHealthPanel';
+import { BacklogReviewPanel } from './components/BacklogReviewPanel';
+import { applyProposals, planBacklogProposals } from './services/backlogProposals';
+import type { Proposal } from './services/backlogProposals';
 import { AgendaView } from './components/AgendaView';
 import { SessionAgendaCard } from './components/SessionAgendaCard';
 import { SessionClosingPanel } from './components/SessionClosingPanel';
@@ -79,6 +82,7 @@ export const App: React.FC = () => {
   const [isAnalyzingLive, setIsAnalyzingLive] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [isAssistantBusy, setIsAssistantBusy] = useState(false);
+  const [pendingReview, setPendingReview] = useState<{ projectId: string; sessionId?: string; proposals: Proposal[] } | null>(null);
   const [notice, setNotice] = useState<{ type: 'error' | 'info' | 'success'; text: string } | null>(null);
 
   // New Specialist backlog features: Focus Mode & Informal Chat Mode
@@ -699,6 +703,17 @@ export const App: React.FC = () => {
     saveProject(updatedProj);
   };
 
+  const handleApplyReview = (acceptedIds: string[]) => {
+    if (!pendingReview) return;
+    const { proposals, sessionId } = pendingReview;
+    update(activeProject.id, p => {
+      const next = applyProposals({ okrs: p.okrs, epics: p.epics, prd: p.prd }, proposals, acceptedIds, { at: new Date().toISOString(), sessionId });
+      return { ...p, okrs: next.okrs, epics: next.epics };
+    });
+    setPendingReview(null);
+    showNotice('success', `${acceptedIds.length} de ${proposals.length} proposta(s) aplicada(s) ao backlog.`);
+  };
+
   const handleGenerateBacklogWithAI = async () => {
     setIsGeneratingBacklog(true);
     try {
@@ -719,27 +734,24 @@ export const App: React.FC = () => {
         showNotice('success', 'Backlog e PRD gerados com a IA.');
       }
 
-      // Merge sobre o estado mais recente do storage: itens novos entram direto; itens existentes só
-      // mudam se o usuário confirmar, e o que ele editou durante a geração não é pisado.
+      // Nada entra no backlog sem o aceite do usuário: a IA gera propostas item a item, e a tela de revisão
+      // aplica só as aceitas, sobre o estado mais recente (o que ele editou durante a geração não é pisado).
       const latest = storageService.getAllProjects().find(p => p.id === activeProject.id) ?? activeProject;
-      const plan = planBacklogMerge({ okrs: latest.okrs, epics: latest.epics, prd: latest.prd }, result);
-      let chosen = plan.merged;
-      if (plan.changed.length > 0) {
-        const shown = plan.changed.slice(0, 6).map(label => `• ${label}`).join('\n');
-        const rest = plan.changed.length > 6 ? `\n… e mais ${plan.changed.length - 6}` : '';
-        const useAiVersion = window.confirm(
-          `A IA propõe alterar ${plan.changed.length} item(ns) que você já tem:\n\n${shown}${rest}\n\n` +
-          'OK = usar a versão da IA nesses itens.\nCancelar = manter os seus (os itens novos entram de qualquer forma).'
-        );
-        if (useAiVersion) chosen = plan.replaced;
-      }
+      const latestData = { okrs: latest.okrs, epics: latest.epics, prd: latest.prd };
 
-      update(activeProject.id, p => ({ ...p, ...chosen }));
+      // O PRD só é preenchido quando ainda é um rascunho vazio; um PRD que o usuário escreveu não é tocado.
+      const prd = planBacklogMerge(latestData, result).merged.prd;
+      if (prd !== latest.prd) update(activeProject.id, p => ({ ...p, prd }));
 
-      const { added } = plan;
-      const kept = plan.changed.length > 0 && chosen === plan.merged ? ` ${plan.changed.length} item(ns) seu(s) mantido(s).` : '';
-      showNotice('success', `Backlog atualizado: +${added.epics} épico(s), +${added.features} feature(s), +${added.stories} história(s), +${added.okrs} OKR(s).${kept}`);
+      const proposals = planBacklogProposals(latestData, result);
       setActiveView('backlog');
+      if (proposals.length === 0) {
+        setPendingReview(null);
+        showNotice('info', 'A IA não trouxe nada novo nem diferente para o backlog.');
+      } else {
+        setPendingReview({ projectId: activeProject.id, sessionId: currentSession?.id, proposals });
+        showNotice('info', `A IA fez ${proposals.length} proposta(s) para o backlog. Revise e aplique o que quiser.`);
+      }
     } catch (e: any) {
       console.error(e);
       showNotice('error', e?.message || 'Erro inesperado ao gerar o backlog.');
@@ -1118,6 +1130,14 @@ export const App: React.FC = () => {
         {/* VIEW 2: BACKLOG & OKRS (DISCOVERY AO DONE) */}
         {activeView === 'backlog' && (
           <>
+          {pendingReview && pendingReview.projectId === activeProject.id && (
+            <BacklogReviewPanel
+              key={pendingReview.proposals.map(p => p.id).join('|')}
+              proposals={pendingReview.proposals}
+              onApply={handleApplyReview}
+              onDiscard={() => setPendingReview(null)}
+            />
+          )}
           <BacklogHealthPanel epics={activeProject.epics} />
           <DiscoveryToDoneView
             okrs={activeProject.okrs}
