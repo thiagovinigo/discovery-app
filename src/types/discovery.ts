@@ -73,7 +73,42 @@ export interface AcceptanceCriteria {
   then: string;
 }
 
-export interface TechnicalTask {
+/** `hypothesis`: sem evidência; `validated`: uma reunião confirmou; `contested`: uma fala contradiz; `invalidated`: descartado. */
+export type ValidationStatus = 'hypothesis' | 'validated' | 'contested' | 'invalidated';
+
+/** Uma fala que confirma ou contesta um item do backlog. */
+export interface ValidationEvidence {
+  stance: 'confirms' | 'contests';
+  quote: string;
+  sessionId?: string;
+  sessionTitle?: string;
+  timestamp?: string;
+  /** Quando a evidência foi registrada, em ISO-8601. */
+  at: string;
+}
+
+export interface ItemChange {
+  /** ISO-8601. */
+  at: string;
+  summary: string;
+  sessionId?: string;
+}
+
+/**
+ * Metadados comuns aos 4 níveis do backlog (épico, feature, história e task). Todos opcionais: item sem
+ * `validation` conta como `hypothesis` e sem `origin` como de origem desconhecida, então dados antigos abrem como estão.
+ */
+export interface BacklogMeta {
+  origin?: { author: 'ai' | 'user'; sessionId?: string; quote?: string; timestamp?: string; createdAt: string };
+  validation?: { status: ValidationStatus; evidences: ValidationEvidence[] };
+  /** Última verificação de qualidade, em ISO-8601. */
+  verifiedAt?: string;
+  /** Id do item de origem quando este nasceu de um fatiamento. */
+  sliceOf?: string;
+  changes?: ItemChange[];
+}
+
+export interface TechnicalTask extends BacklogMeta {
   id: string;
   title: string;
   type: 'frontend' | 'backend' | 'database' | 'analytics' | 'qa' | 'infra';
@@ -89,7 +124,7 @@ export interface ChecklistItem {
 
 export type DomainCategory = 'checkout' | 'onboarding' | 'security' | 'operations' | 'core' | 'analytics';
 
-export interface UserStory {
+export interface UserStory extends BacklogMeta {
   id: string;
   featureId: string;
   title: string;
@@ -111,7 +146,7 @@ export interface UserStory {
   isBug?: boolean;
 }
 
-export interface Feature {
+export interface Feature extends BacklogMeta {
   id: string;
   epicId: string;
   title: string;
@@ -129,7 +164,7 @@ export interface Feature {
   userStories: UserStory[];
 }
 
-export interface Epic {
+export interface Epic extends BacklogMeta {
   id: string;
   title: string;
   objective: string;

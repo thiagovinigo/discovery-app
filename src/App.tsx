@@ -22,6 +22,7 @@ import { StakeholdersView } from './components/StakeholdersView';
 import { InterviewView } from './components/InterviewView';
 import { createProjectActions } from './state/projectActions';
 import { NotesView } from './components/NotesView';
+import { BacklogHealthPanel } from './components/BacklogHealthPanel';
 import { AgendaView } from './components/AgendaView';
 import { SessionAgendaCard } from './components/SessionAgendaCard';
 import { SessionClosingPanel } from './components/SessionClosingPanel';
@@ -1116,6 +1117,8 @@ export const App: React.FC = () => {
 
         {/* VIEW 2: BACKLOG & OKRS (DISCOVERY AO DONE) */}
         {activeView === 'backlog' && (
+          <>
+          <BacklogHealthPanel epics={activeProject.epics} />
           <DiscoveryToDoneView
             okrs={activeProject.okrs}
             epics={activeProject.epics}
@@ -1126,6 +1129,7 @@ export const App: React.FC = () => {
             onToggleChecklistItem={handleToggleStoryChecklist}
             onNavigateToLiveRoom={() => setActiveView('live_room')}
           />
+          </>
         )}
 
         {/* VIEW 3: PROJECT DOCUMENTATION & HISTORY */}

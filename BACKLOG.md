@@ -141,7 +141,11 @@ Pedido: o backlog deve aceitar **fatiamento, merge, atualização e incremento**
 | E8.7 | **Histórico e desfazer**: cada aplicação grava um instantâneo antes de mudar o backlog, com botão para desfazer a última revisão, e o histórico por item é visível | M | M | E8.1 | Desfazer devolve o backlog exatamente ao estado anterior à revisão |
 | E8.8 | Exportações (Jira, GitHub, Linear, PRD, SPEC) incluem estado de validação, origem e `sliceOf`; itens `invalidado` ficam de fora por padrão | P | B | E8.1, E6.2 | O export de um item validado traz a citação de origem |
 
-**Decisões pendentes (PO)**
+**Decisões do PO (respondidas):** 1) definições de validação e verificação aprovadas; 2) a revisão aceita proposta por proposta **e** em pacote ("aceitar tudo"); 3) desfazer **não** é obrigatório na primeira versão (E8.7 fica depois); 4) itens contestados e invalidados **ficam visíveis**, marcados; 5) ordem a critério do time: E8.1 e E8.6 primeiro (não mudam o que já existe), depois E8.2, E8.4, E8.5, E8.3, E8.7, E8.8.
+
+**Progresso do E8:** **E8.1 feito** (tipos `BacklogMeta`, todos opcionais nos 4 níveis, sem migração; `backlogItemService`: estado de validação, evidências, origem, histórico). **E8.6 feito** (`verificationService`: bloqueios e avisos por história, "pronto para dev?"). O painel "Saúde do backlog" aparece na tela de Backlog com contagem de validação, histórias prontas, lacunas e itens contestados com a citação. Ainda não há quem *registre* evidências (E8.5) nem proposta de revisão (E8.4): por isso hoje tudo conta como hipótese.
+
+**Decisões pendentes (PO) — já respondidas acima, mantidas para histórico**
 1. As definições de **validação** e **verificação** acima estão certas? Em especial: validação é sobre a **necessidade** (evidência de reunião) e verificação é sobre a **qualidade do item**.
 2. A revisão aceita **proposta por proposta** (recomendado) ou também em **pacote único**, com "aceitar tudo"?
 3. **Desfazer** (E8.7) é obrigatório já na primeira versão? Recomendo que sim, porque a IA passa a alterar o backlog.
