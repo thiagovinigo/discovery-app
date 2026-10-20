@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Radio, Mail, ListChecks, Loader2, Copy, Check, Flame, Target, HelpCircle, Quote } from 'lucide-react';
 import { DiscoveryProject, MeetingSession } from '../types/discovery';
 import { runAgent, offlineFollowUp } from '../services/agentService';
+import { clusterPainPoints } from '../services/insightService';
 import { AgentPanel } from './AgentPanel';
 
 interface MeetingsViewProps {
@@ -111,33 +112,8 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({ project, selectedSes
   const allQuotes = allSessions.flatMap(s => (s.summary.goldenQuotes || []).map(q => ({ ...q, sessionTitle: s.title })));
   const allJtbds = allSessions.flatMap(s => s.jtbds.map(j => ({ ...j, sessionTitle: s.title })));
 
-  // Group recurring pain points by similar keywords
-  const painClusters = [
-    {
-      theme: 'Fechamento & Planilhas Manuais',
-      occurrences: allPainPoints.filter(p => p.description.toLowerCase().includes('planilha') || p.description.toLowerCase().includes('manual') || p.description.toLowerCase().includes('dias') || p.description.toLowerCase().includes('excel')).length || 2,
-      severity: 'high' as const,
-      sessionsCount: allSessions.length,
-      sampleQuote: allQuotes[0]?.quote || 'Levamos 4 dias inteiros cruzando planilhas no Excel',
-      impact: 'Consome ~40h/mês por equipe e paralisa entregas.'
-    },
-    {
-      theme: 'Divergências de Centavos & Travamentos de Lotes',
-      occurrences: allPainPoints.filter(p => p.description.toLowerCase().includes('centavo') || p.description.toLowerCase().includes('trava') || p.description.toLowerCase().includes('lote')).length || 2,
-      severity: 'high' as const,
-      sessionsCount: allSessions.length,
-      sampleQuote: allQuotes[1]?.quote || 'Diferença de R$ 0,05 trava o lote todo de 200 lojas e ninguém recebe.',
-      impact: 'Bloqueia pagamentos de parceiros idôneos e sobrecarrega suporte.'
-    },
-    {
-      theme: 'Invisibilidade de Chargebacks & Cancelamentos',
-      occurrences: allPainPoints.filter(p => p.description.toLowerCase().includes('chargeback') || p.description.toLowerCase().includes('aviso')).length || 1,
-      severity: 'medium' as const,
-      sessionsCount: Math.max(1, Math.floor(allSessions.length * 0.7)),
-      sampleQuote: 'Chargebacks e cancelamentos caem sem aviso prévio quebrando a conciliação.',
-      impact: 'Gera retrabalho contábil posterior.'
-    }
-  ];
+  // Dores que se repetem, agrupadas por assunto parecido: tudo vem das dores mapeadas nas reuniões deste projeto
+  const painClusters = clusterPainPoints(allSessions);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '16px', alignItems: 'start' }}>
@@ -219,27 +195,32 @@ export const MeetingsView: React.FC<MeetingsViewProps> = ({ project, selectedSes
             <h3 style={{ fontSize: '0.95rem', fontWeight: 800, marginBottom: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Flame size={16} color="#f43f5e" /> Mapa Térmico de Dores Mais Recorrentes (Cross-Session)
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
-              {painClusters.map((cluster, idx) => (
-                <div key={idx} className="glass-card" style={{ padding: '16px', borderTop: `4px solid ${cluster.severity === 'high' ? '#f43f5e' : '#f59e0b'}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span className="badge badge-rose" style={{ fontSize: '0.68rem' }}>
-                      Frequência: {cluster.occurrences} menções
-                    </span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
-                      Presente em 100% das sessões
-                    </span>
+            {painClusters.length === 0 ? (
+              <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Ainda não há dores mapeadas nas reuniões. Grave ou importe uma conversa e analise-a para ver aqui o que se repete.
+              </p>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
+                {painClusters.map(cluster => (
+                  <div key={cluster.theme} className="glass-card" style={{ padding: '16px', borderTop: `4px solid ${cluster.severity === 'high' ? '#f43f5e' : '#f59e0b'}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span className="badge badge-rose" style={{ fontSize: '0.68rem' }}>
+                        {`Frequência: ${cluster.occurrences} ${cluster.occurrences === 1 ? 'menção' : 'menções'}`}
+                      </span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>
+                        {`Em ${cluster.sessionsCount} de ${allSessions.length} ${allSessions.length === 1 ? 'reunião' : 'reuniões'}`}
+                      </span>
+                    </div>
+                    <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '6px' }}>{cluster.theme}</h4>
+                    {cluster.sampleQuote && (
+                      <div style={{ padding: '8px 10px', borderRadius: '6px', background: 'rgba(0,0,0,0.3)', borderLeft: '3px solid var(--accent-cyan)', fontStyle: 'italic', fontSize: '0.75rem', color: '#e2e8f0' }}>
+                        {`"${cluster.sampleQuote}"`}
+                      </div>
+                    )}
                   </div>
-                  <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '6px' }}>{cluster.theme}</h4>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                    <strong>Impacto nos Squads:</strong> {cluster.impact}
-                  </p>
-                  <div style={{ padding: '8px 10px', borderRadius: '6px', background: 'rgba(0,0,0,0.3)', borderLeft: '3px solid var(--accent-cyan)', fontStyle: 'italic', fontSize: '0.75rem', color: '#e2e8f0' }}>
-                    "{cluster.sampleQuote}"
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Golden Quotes Consolidadas */}

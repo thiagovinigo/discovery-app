@@ -1,7 +1,43 @@
-import { DiscoveryProject, MeetingSession } from '../types/discovery';
+import { DiscoveryProject, Epic, MeetingSession } from '../types/discovery';
+import { isFilled } from './interviewService';
+import { ROLE_LABELS } from './stakeholderService';
 import { validationOf } from './backlogItemService';
 import { traceLines, withoutInvalidated } from './exportTrace';
 import type { ExportOptions } from './exportTrace';
+
+const NOT_INFORMED = 'Não informado.';
+
+/** O texto que o usuário escreveu; se faltar (ou for o texto de preenchimento antigo), diz que não foi informado em vez de inventar. */
+const informed = (value?: string): string => (isFilled(value) ? value!.trim() : NOT_INFORMED);
+
+/** Uma linha de lista por item; lista vazia vira "Não informado." */
+const bulletList = <T,>(items: T[], line: (item: T) => string, empty: string = NOT_INFORMED): string =>
+  items.length ? items.map(line).join('') : `- ${empty}\n`;
+
+const NOT_PROVIDED = 'Not provided.';
+
+/** Igual a `informed`, para o SPEC, que é escrito em inglês. */
+const provided = (value?: string): string => (isFilled(value) ? value!.trim() : NOT_PROVIDED);
+
+const EPIC_STATUS_LABELS: Record<Epic['status'], string> = {
+  discovery: 'Em discovery',
+  ready_for_dev: 'Pronto para desenvolvimento',
+  in_progress: 'Em andamento',
+  done: 'Concluído'
+};
+
+/** Itens de DoR/DoD das histórias, sem repetir, com quantas histórias já o marcaram. Sem itens: "Ainda não definidos." */
+const checklistSummary = (items: { label: string; checked: boolean }[]): string => {
+  if (items.length === 0) return `Ainda não definidos.\n`;
+  const byLabel = new Map<string, { checked: number; total: number }>();
+  for (const item of items) {
+    const entry = byLabel.get(item.label) ?? { checked: 0, total: 0 };
+    entry.total++;
+    if (item.checked) entry.checked++;
+    byLabel.set(item.label, entry);
+  }
+  return [...byLabel.entries()].map(([label, { checked, total }]) => `- [${checked === total ? 'x' : ' '}] ${label} (${checked}/${total} histórias)\n`).join('');
+};
 
 /** Linhas de rastreabilidade (validação, evidência, fatiamento, origem) de um item, como texto de uma linha só. */
 const traceInline = (item: Parameters<typeof traceLines>[0]): string => {
@@ -289,16 +325,16 @@ export const exportService = {
     const project = withoutInvalidated(source, options);
     const prd = project.prd;
     let md = `# PRD: ${prd.title || project.name}\n\n`;
-    md += `> **Versão:** ${prd.version || '1.0.0 (Validado via Discovery)'} | **Status:** Aprovado para Engenharia | **Última Atualização:** ${prd.lastUpdated || project.updatedAt}\n\n`;
+    // O app não registra aprovação do PRD, então ele nunca se declara aprovado: é um rascunho até alguém aprovar fora daqui.
+    md += `> **Versão:** ${prd.version || '0.1 (rascunho)'} | **Status:** Rascunho | **Última Atualização:** ${prd.lastUpdated || project.updatedAt}\n\n`;
     md += `---\n\n`;
 
     // 1. Problema e Oportunidade
     md += `## 1. Problema e Oportunidade\n\n`;
     md += `### Problema Central\n`;
-    md += `**${prd.problemStatement || project.description}**\n\n`;
+    md += `**${isFilled(prd.problemStatement) ? prd.problemStatement.trim() : informed(project.description)}**\n\n`;
     md += `### Contexto e Evidências de Discovery\n`;
-    md += `- **Segmento Afetado:** ${prd.targetAudience || 'Equipes de Operações Financeiras e Lojistas B2B'}\n`;
-    md += `- **Severidade:** Alta (Gargalo crítico com bloqueio de fluxo financeiro)\n`;
+    md += `- **Segmento Afetado:** ${informed(prd.targetAudience)}\n`;
     md += `- **Evidências Coletadas:**\n`;
 
     // Extract interview quotes from sessions & stories
@@ -315,12 +351,12 @@ export const exportService = {
         md += `  - 💬 *"${q.text}"* — **${q.speaker}**${q.context ? ` (${q.context})` : ''}\n`;
       });
     } else {
-      md += `  - 85% dos usuários entrevistados relataram travamento recorrente no final do mês.\n`;
+      md += `  - Ainda não há citações de entrevistas registradas.\n`;
     }
     md += `\n`;
 
     md += `### Oportunidade de Negócio\n`;
-    md += `- **Proposta de Valor:** ${prd.valueProposition || 'Automação inteligente e liquidação sem paradas manuais.'}\n`;
+    md += `- **Proposta de Valor:** ${informed(prd.valueProposition)}\n`;
     if (project.leanCanvas?.unfairAdvantage) {
       md += `- **Vantagem Competitiva Única:** ${project.leanCanvas.unfairAdvantage}\n`;
     }
@@ -344,33 +380,28 @@ export const exportService = {
         md += `\n`;
       });
     } else {
-      md += `**Público Alvo:** ${prd.targetAudience}\n\n`;
+      md += `**Público Alvo:** ${informed(prd.targetAudience)}\n\n`;
     }
 
     md += `### Não-Audiência (Out-of-Scope para Usuários)\n`;
-    md += `Deliberadamente NÃO construindo para:\n`;
-    md += `- Pessoas físicas ou transações C2C sem CNPJ ativo;\n`;
-    md += `- Operações com conciliação manual customizada que rejeitem automatização de regras contábeis.\n\n`;
+    md += `${NOT_INFORMED}\n\n`;
     md += `---\n\n`;
 
     // 3. Solução & Escopo de Produto
     md += `## 3. Solução & Escopo de Produto\n\n`;
     md += `### Visão da Solução\n`;
-    md += `${prd.valueProposition}\n\n`;
+    md += `${informed(prd.valueProposition)}\n\n`;
 
     md += `### Escopo de Inclusão (In-Scope)\n`;
-    prd.inScope.forEach(item => {
-      md += `- [x] ${item}\n`;
-    });
+    md += bulletList(prd.inScope, item => `- [x] ${item}\n`);
     md += `\n`;
 
     md += `### Escopo de Exclusão (Out-of-Scope)\n`;
-    prd.outOfScope.forEach(item => {
-      md += `- [ ] ⛔ ${item} (Previsto para fases futuras)\n`;
-    });
+    md += bulletList(prd.outOfScope, item => `- [ ] ⛔ ${item}\n`);
     md += `\n`;
 
     md += `### Épicos e Features Detalhadas\n\n`;
+    if (project.epics.length === 0) md += `Nenhum épico no backlog ainda.\n\n`;
     project.epics.forEach((epic, eIdx) => {
       md += `#### Épico ${eIdx + 1}: ${epic.title}\n`;
       md += `*Objetivo:* ${epic.objective}\n\n`;
@@ -392,29 +423,35 @@ export const exportService = {
     // 4. Métricas e Success Criteria
     md += `## 4. Métricas e Critérios de Sucesso (OKRs)\n\n`;
     md += `### Tabela de Key Results (KRs)\n\n`;
-    md += `| Métrica / KR | Baseline Atual | Meta (Target) | Status |\n`;
-    md += `|---|---|---|---|\n`;
-    project.okrs.forEach(okr => {
-      okr.keyResults.forEach(kr => {
-        md += `| ${kr.description} | ${kr.baseline} | **${kr.target}** | ${kr.current || 'Em Discovery'} |\n`;
+    if (project.okrs.length === 0) {
+      md += `Nenhum OKR definido.\n`;
+    } else {
+      md += `| Métrica / KR | Baseline Atual | Meta (Target) | Status |\n`;
+      md += `|---|---|---|---|\n`;
+      project.okrs.forEach(okr => {
+        okr.keyResults.forEach(kr => {
+          md += `| ${kr.description} | ${kr.baseline} | **${kr.target}** | ${kr.current || '—'} |\n`;
+        });
       });
-    });
+    }
     md += `\n`;
 
-    md += `### Critérios de Go-Live (Homologação de Lançamento)\n`;
-    prd.successMetrics.forEach(metric => {
-      md += `- ✅ ${metric}\n`;
-    });
+    md += `### Métricas de Sucesso\n`;
+    md += bulletList(prd.successMetrics, metric => `- ${metric}\n`);
     md += `\n---\n\n`;
 
     // 5. Constraints, Riscos & Registro de Decisões
     md += `## 5. Restrições Técnicas, Riscos & Decisões\n\n`;
     md += `### Matriz de Riscos e Mitigações\n\n`;
-    md += `| Risco Mapeado | Impacto | Mitigação Obrigatória |\n`;
-    md += `|---|---|---|\n`;
-    prd.risksAndMitigations.forEach(rm => {
-      md += `| ${rm.risk} | Alto | ${rm.mitigation} |\n`;
-    });
+    if (prd.risksAndMitigations.length === 0) {
+      md += `Nenhum risco mapeado.\n`;
+    } else {
+      md += `| Risco Mapeado | Mitigação |\n`;
+      md += `|---|---|\n`;
+      prd.risksAndMitigations.forEach(rm => {
+        md += `| ${rm.risk} | ${rm.mitigation.trim() || '—'} |\n`;
+      });
+    }
     md += `\n`;
 
     if (project.decisionLog && project.decisionLog.length > 0) {
@@ -429,20 +466,17 @@ export const exportService = {
     md += `---\n\n`;
 
     // 6. Roadmap
-    md += `## 6. Roadmap e Fases de Lançamento\n\n`;
-    md += `### Fase 1: MVP Core (Semanas 1-3)\n`;
-    md += `- Upload e normalização automática de CSVs de adquirentes (Cielo, Stone, Rede);\n`;
-    md += `- Motor de matching com tolerância configurável de centavos (até R$ 1,00);\n`;
-    md += `- Dashboard de auditoria e liberação de lotes.\n\n`;
-
-    md += `### Fase 2: Robustez & Notificações (Semanas 4-6)\n`;
-    md += `- Conexão direta via Webhook / SFTP com bancos e adquirentes;\n`;
-    md += `- Notificação em tempo real de retenção e chargebacks para lojistas;\n`;
-    md += `- Exportação contábil homologada e trilha imutável de auditoria.\n\n`;
-
-    md += `### Fase 3: Expansão (Semanas 7+)\n`;
-    md += `- Antecipação inteligente de recebíveis;\n`;
-    md += `- Emissão automatizada de notas fiscais de serviço.\n\n`;
+    md += `## 6. Roadmap\n\n`;
+    if (project.epics.length === 0) {
+      md += `Ainda não definido: o roadmap vem dos épicos do backlog.\n\n`;
+    } else {
+      md += `| Épico | Status | Data alvo |\n`;
+      md += `|---|---|---|\n`;
+      project.epics.forEach(epic => {
+        md += `| ${epic.title} | ${EPIC_STATUS_LABELS[epic.status]} | ${epic.targetDate || '—'} |\n`;
+      });
+      md += `\n`;
+    }
     md += `---\n\n`;
 
     // 7. Casos de Uso & Histórias de Usuário BDD
@@ -478,25 +512,25 @@ export const exportService = {
     md += `---\n\n`;
 
     // 8. Governança, DoR, DoD & Aprovações
+    const stories = project.epics.flatMap(e => e.features).flatMap(f => f.userStories);
     md += `## 8. Governança, DoR, DoD e Aprovações\n\n`;
-    md += `### Definition of Ready (DoR) Padrão\n`;
-    md += `- [x] Problema validado com citações reais de discovery;\n`;
-    md += `- [x] Critérios de aceite em BDD Gherkin (Dado/Quando/Então);\n`;
-    md += `- [x] Dependências de banco e APIs externas mapeadas;\n`;
-    md += `- [x] Story Points calibrados com o time de engenharia.\n\n`;
+    md += `### Definition of Ready (DoR)\n`;
+    md += checklistSummary(stories.flatMap(s => s.dorChecklist ?? []));
+    md += `\n### Definition of Done (DoD)\n`;
+    md += checklistSummary(stories.flatMap(s => s.dodChecklist ?? []));
 
-    md += `### Definition of Done (DoD) Padrão\n`;
-    md += `- [x] Cobertura de testes unitários e de integração > 80%;\n`;
-    md += `- [x] Logs de auditoria contábil e conformidade com LGPD/PCI;\n`;
-    md += `- [x] Homologação em Staging com carga de teste;\n`;
-    md += `- [x] PR aprovado por ao menos 2 engenheiros pares.\n\n`;
-
-    md += `### Tabela de Aprovação\n\n`;
-    md += `| Papel | Nome | Status | Data |\n`;
-    md += `|---|---|---|---|\n`;
-    md += `| Product Lead | Carlos PM | ✅ Aprovado | ${prd.lastUpdated || project.updatedAt} |\n`;
-    md += `| Tech Lead | Mariana Eng | ✅ Aprovado | ${prd.lastUpdated || project.updatedAt} |\n`;
-    md += `| Key Stakeholder (CFO) | Renata Silveira | ✅ Aprovado | ${prd.lastUpdated || project.updatedAt} |\n`;
+    md += `\n### Aprovações\n\n`;
+    // O app não registra aprovações: quem decide ou patrocina aparece como pendente até aprovar fora daqui.
+    const approvers = (project.stakeholders ?? []).filter(s => s.role === 'decisor' || s.role === 'patrocinador');
+    if (approvers.length === 0) {
+      md += `Nenhuma aprovação registrada. Cadastre decisores e patrocinadores em Stakeholders para listá-los aqui.\n`;
+    } else {
+      md += `| Papel | Nome | Status | Data |\n`;
+      md += `|---|---|---|---|\n`;
+      approvers.forEach(a => {
+        md += `| ${ROLE_LABELS[a.role]} | ${a.name} | ⏳ Pendente | — |\n`;
+      });
+    }
 
     return md;
   },
@@ -507,7 +541,7 @@ export const exportService = {
     let spec = `# SPEC.md — AI Autonomous Implementation Specification\n\n`;
     spec += `> **Project:** ${project.name}\n`;
     spec += `> **Target AI Agents:** Claude Code, Antigravity, Cursor Agent, GitHub Copilot Workspace, OpenAI o3/Codex\n`;
-    spec += `> **Specification Version:** 1.0.0-PROD\n`;
+    spec += `> **Specification Version:** ${prd.version || '0.1 (draft)'}\n`;
     spec += `> **Generated At:** ${new Date().toISOString()}\n\n`;
     spec += `---\n\n`;
 
@@ -518,69 +552,34 @@ export const exportService = {
     spec += `Follow these non-negotiable engineering principles:\n`;
     spec += `1. ZERO CODE PLACEHOLDERS: Implement all methods, parsers, algorithms, and interfaces completely.\n`;
     spec += `2. STRICT CONTRACT ADHERENCE: Follow all provided TypeScript types and schemas without arbitrary renames.\n`;
-    spec += `3. DEFENSIVE PROGRAMMING: Handle edge cases, null/undefined payloads, malformed CSV streams, and network timeouts.\n`;
+    spec += `3. DEFENSIVE PROGRAMMING: Handle edge cases, null/undefined payloads, invalid input, and network failures.\n`;
     spec += `4. TEST-DRIVEN: Treat every Gherkin scenario as a mandatory unit/integration test assertion.\n`;
-    spec += `5. PERFORMANCE & SECURITY: Ensure streaming parsing for large datasets (>50k rows) and zero plain-text credential leaks.\n`;
+    spec += `5. SECURITY: Validate input at system boundaries and never commit secrets or credentials.\n`;
     spec += `\`\`\`\n\n`;
 
-    // 2. TECH STACK & SYSTEM ARCHITECTURE
-    spec += `## 2. Target Architecture & Tech Stack\n\n`;
-    spec += `### Recommended Tech Stack\n`;
-    spec += `- **Frontend UI:** React 19 + TypeScript (Strict mode enabled)\n`;
-    spec += `- **Styling:** CSS Modern Design System / Glassmorphism with HSL tokens\n`;
-    spec += `- **State & Storage:** Local-first reactive storage with immutable audit trails\n`;
-    spec += `- **Processing Engine:** Web Workers / Streaming Buffer parser for high-throughput CSV/CNAB reconciliation\n`;
-    spec += `- **Testing:** Vitest / React Testing Library with BDD Gherkin runner\n\n`;
 
-    spec += `### Recommended Directory Blueprint\n`;
-    spec += `\`\`\`text\n`;
-    spec += `src/\n`;
-    spec += `├── core/\n`;
-    spec += `│   ├── reconciliationEngine.ts    # Matching algorithm & tolerance resolver\n`;
-    spec += `│   ├── parsers/                  # Multiformat parser (Cielo, Stone, Rede, CNAB)\n`;
-    spec += `│   └── auditLogger.ts            # Immutable transaction audit trail\n`;
-    spec += `├── types/\n`;
-    spec += `│   └── discovery.ts              # Full domain interfaces & schemas\n`;
-    spec += `├── services/\n`;
-    spec += `│   ├── storageService.ts         # Persistent data layer & migration\n`;
-    spec += `│   ├── exportService.ts          # Jira, GitHub, Linear, PRD, SPEC generators\n`;
-    spec += `│   └── notificationService.ts    # Webhooks & alerts for merchants\n`;
-    spec += `└── components/\n`;
-    spec += `    ├── reconciliation/           # Reconciler UI & tolerance sliders\n`;
-    spec += `    ├── backlog/                  # Kanban, DoR/DoD & evidence quotes\n`;
-    spec += `    └── dashboard/                # Real-time metrics & financial SLA monitors\n`;
-    spec += `\`\`\`\n\n`;
+    // 2. Contexto do produto: só o que o usuário escreveu no PRD
+    spec += `## 2. Product Context\n\n`;
+    spec += `- **Problem:** ${provided(prd.problemStatement)}\n`;
+    spec += `- **Target audience:** ${provided(prd.targetAudience)}\n`;
+    spec += `- **Value proposition:** ${provided(prd.valueProposition)}\n`;
+    if (isFilled(prd.northStarMetric)) spec += `- **North Star metric:** ${prd.northStarMetric!.trim()}\n`;
+    spec += `\n### In scope\n`;
+    spec += bulletList(prd.inScope, item => `- ${item}\n`, NOT_PROVIDED);
+    spec += `\n### Out of scope\n`;
+    spec += bulletList(prd.outOfScope, item => `- ${item}\n`, NOT_PROVIDED);
+    spec += `\n### Technology\n`;
+    spec += `Not specified by the product team. Follow the conventions and stack of the existing codebase and do not introduce new frameworks without justification.\n\n`;
 
-    // 3. COMPLETE DOMAIN SCHEMAS
-    spec += `## 3. Domain Model & TypeScript Schemas\n\n`;
-    spec += `\`\`\`typescript\n`;
-    spec += `export interface TransactionRecord {\n`;
-    spec += `  id: string;\n`;
-    spec += `  acquirer: 'cielo' | 'stone' | 'rede' | 'generic';\n`;
-    spec += `  merchantId: string;\n`;
-    spec += `  authorizationCode: string;\n`;
-    spec += `  grossAmount: number;\n`;
-    spec += `  feeAmount: number;\n`;
-    spec += `  netAmount: number;\n`;
-    spec += `  transactionDate: string;\n`;
-    spec += `  status: 'matched' | 'divergent' | 'approved_by_tolerance' | 'rejected';\n`;
-    spec += `}\n\n`;
-    spec += `export interface ReconciliationToleranceConfig {\n`;
-    spec += `  maxCentDifferencePerMerchant: number; // e.g. 1.00 BRL\n`;
-    spec += `  maxMonthlyCumulativeDifference: number; // e.g. 20.00 BRL\n`;
-    spec += `  autoReleaseEnabled: boolean;\n`;
-    spec += `  adjustmentAccountCode: string;\n`;
-    spec += `}\n\n`;
-    spec += `export interface BatchReconciliationResult {\n`;
-    spec += `  batchId: string;\n`;
-    spec += `  totalTransactions: number;\n`;
-    spec += `  matchedTransactions: number;\n`;
-    spec += `  autoApprovedTolerant: number;\n`;
-    spec += `  heldDivergentCount: number;\n`;
-    spec += `  totalAdjustedAmount: number;\n`;
-    spec += `  processedAt: string;\n`;
-    spec += `}\n`;
-    spec += `\`\`\`\n\n`;
+    // 3. Critérios de sucesso, premissas e riscos
+    spec += `## 3. Success Criteria, Assumptions & Risks\n\n`;
+    spec += `### Success metrics\n`;
+    spec += bulletList(prd.successMetrics, item => `- ${item}\n`, NOT_PROVIDED);
+    spec += `\n### Assumptions\n`;
+    spec += bulletList(prd.assumptions, item => `- ${item}\n`, NOT_PROVIDED);
+    spec += `\n### Risks and mitigations\n`;
+    spec += bulletList(prd.risksAndMitigations, rm => `- ${rm.risk}${rm.mitigation.trim() ? ` → ${rm.mitigation.trim()}` : ''}\n`, NOT_PROVIDED);
+    spec += `\n`;
 
     // 4. STEP-BY-STEP IMPLEMENTATION PLAN FOR AI
     spec += `## 4. Step-by-Step AI Implementation Plan\n\n`;
@@ -631,19 +630,13 @@ export const exportService = {
       });
     });
 
-    // 5. NON-FUNCTIONAL REQUIREMENTS & GUARDRAILS
-    spec += `## 5. Non-Functional & Security Requirements\n\n`;
-    spec += `1. **Latency & Throughput:** Ingestion of 50,000 transaction rows must parse in < 3 seconds.\n`;
-    spec += `2. **Zero Precision Loss:** Use integer representation in cents (\`amountInCents = Math.round(val * 100)\`) or Big.js to prevent IEEE-754 floating point arithmetic anomalies.\n`;
-    spec += `3. **Auditing & Immutability:** Any manual or automatic threshold adjustment must generate an append-only audit event record with timestamp and actor.\n`;
-    spec += `4. **Resilience & Fault Tolerance:** If an acquirer CSV has unknown columns or missing values, skip only corrupt lines, log warning, and process remaining transactions without failing the entire batch.\n\n`;
 
-    // 6. AI AGENT VERIFICATION PROTOCOL
-    spec += `## 6. AI Agent Verification & Completion Checklist\n\n`;
-    spec += `- [ ] All TypeScript types compile with \`tsc --noEmit\` with 0 errors.\n`;
-    spec += `- [ ] Every Gherkin scenario is validated by a corresponding test assertion.\n`;
-    spec += `- [ ] Production build passes with \`npm run build\`.\n`;
-    spec += `- [ ] Zero memory leaks or blocking synchronous operations during large file processing.\n`;
+    // 5. Verificação: genérica, vale para qualquer projeto
+    spec += `## 5. Verification & Completion Checklist\n\n`;
+    spec += `- [ ] The project compiles and passes lint with no errors.\n`;
+    spec += `- [ ] Every Gherkin scenario is covered by an automated test.\n`;
+    spec += `- [ ] The production build passes.\n`;
+    spec += `- [ ] No secrets or credentials are committed.\n`;
 
     return spec;
   },

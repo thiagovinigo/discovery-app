@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DiscoveryProject, MeetingSession } from '../types/discovery';
+import { clarityScore as computeClarity, methodSuggestions, productAreas } from '../services/insightService';
 import {
   Brain,
   Sparkles,
@@ -40,38 +41,12 @@ export const SecondBrainDashboardView: React.FC<SecondBrainDashboardViewProps> =
   const totalEpics = project.epics.length;
   const totalStories = project.epics.reduce((acc, e) => acc + e.features.reduce((fAcc, f) => fAcc + f.userStories.length, 0), 0);
 
-  // Clarity score based on evidence richness
-  const clarityScore = Math.min(95, Math.max(35, Math.round(
-    (totalTranscripts * 3 + totalPainPoints * 8 + totalJtbds * 10 + (totalEpics > 0 ? 25 : 0)) * 0.4
-  )));
+  // Índice de clareza: cresce com a evidência coletada; sem nada coletado, fica em zero
+  const clarityScore = computeClarity({ transcripts: totalTranscripts, painPoints: totalPainPoints, jtbds: totalJtbds, epics: totalEpics });
 
-  // Synaptic recommendations linking active pain points to knowledge methods
-  const synapticRecommendations = [
-    {
-      id: 'syn-1',
-      trigger: 'Fechamento manual em planilhas que trava lote inteiro por divergência de centavos',
-      method: 'Product Backlog Building (PBB - Fábio Aguiar)',
-      badge: 'Fatiamento & Regras',
-      action: 'Fatiar o motor em passos de tolerância automática e critérios Given/When/Then de limite de alçada.',
-      frameworkLink: 'disc-pbb'
-    },
-    {
-      id: 'syn-2',
-      trigger: 'Atrasos no repasse para lojistas gerando atrito e chamados de emergência',
-      method: 'Opportunity Solution Tree (OST - Teresa Torres)',
-      badge: 'Descoberta Contínua',
-      action: 'Mapear a oportunidade de ansiedade do lojista e testar envio de notificações proativas por webhook antes da virada do mês.',
-      frameworkLink: 'disc-continuous-discovery'
-    },
-    {
-      id: 'syn-3',
-      trigger: 'Múltiplos times de desenvolvimento trabalhando em adquirentes e conciliação',
-      method: 'Flight Levels Nível 2 (Coordenação entre Times - Klaus Leopold)',
-      badge: 'Escala & Dependências',
-      action: 'Criar quadro de coordenação de dependências entre a squad de integrações e a squad do internet banking.',
-      frameworkLink: 'scale-flight-levels'
-    }
-  ];
+  // Sugestões de método, cada uma partindo de uma dor mapeada de verdade nas reuniões deste projeto
+  const synapticRecommendations = methodSuggestions(project.sessions);
+  const areas = productAreas(project.epics);
 
   return (
     <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '600px' }}>
@@ -281,9 +256,8 @@ export const SecondBrainDashboardView: React.FC<SecondBrainDashboardViewProps> =
                       <FolderTree size={14} /> A • Areas (Domínios de Produto)
                     </strong>
                     <ul style={{ paddingLeft: '14px', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                      <li>Operações Financeiras</li>
-                      <li>Experiência dos Lojistas B2B</li>
-                      <li>Segurança & Compliance</li>
+                      {areas.length === 0 && <li>Nenhum domínio definido nas histórias ainda</li>}
+                      {areas.map(area => <li key={area.label}>{`${area.label} (${area.stories} ${area.stories === 1 ? 'história' : 'histórias'})`}</li>)}
                     </ul>
                   </div>
 
@@ -304,7 +278,7 @@ export const SecondBrainDashboardView: React.FC<SecondBrainDashboardViewProps> =
                     </strong>
                     <ul style={{ paddingLeft: '14px', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                       <li>{project.decisionLog.length} Decisões no Decision Log</li>
-                      <li>PRD Versão 1.0.0</li>
+                      <li>{`PRD versão ${project.prd.version || '—'}`}</li>
                     </ul>
                   </div>
                 </div>
@@ -398,11 +372,15 @@ export const SecondBrainDashboardView: React.FC<SecondBrainDashboardViewProps> =
               <Sparkles size={16} color="var(--accent-amber)" />
               <h3 style={{ fontSize: '0.92rem', fontWeight: 700 }}>Sinapses Ativas (Dores ➔ Acervo Ágil)</h3>
             </div>
-            <span className="badge badge-amber" style={{ fontSize: '0.68rem' }}>3 Recomendações</span>
+            <span className="badge badge-amber" style={{ fontSize: '0.68rem' }}>
+              {`${synapticRecommendations.length} ${synapticRecommendations.length === 1 ? 'Recomendação' : 'Recomendações'}`}
+            </span>
           </div>
 
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-            O Segundo Cérebro cruzou as falas da reunião com o <strong>Acervo Ágil & IA</strong> e identificou as seguintes soluções metodológicas:
+            {synapticRecommendations.length === 0
+              ? 'Ainda não há dores mapeadas nas reuniões. Quando houver, o Segundo Cérebro as cruza com o Acervo Ágil & IA e sugere um método para cada uma.'
+              : <>O Segundo Cérebro cruzou as dores mapeadas nas reuniões com o <strong>Acervo Ágil & IA</strong> e sugere estes métodos:</>}
           </p>
 
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '10px', paddingRight: '4px' }}>

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { exportService } from './exportService';
+import { storageService } from './storageService';
 import { INITIAL_MOCK_PROJECT } from './mockDataService';
 import type { DiscoveryProject, UserStory } from '../types/discovery';
 
@@ -221,6 +222,134 @@ describe('exportService.exportToLinear', () => {
     expect(output).toContain(`# Linear Backlog Import: ${project.name}`);
     for (const story of allStories) {
       expect(output).toContain(`### ${story.title}`);
+    }
+  });
+});
+
+/** Texto que só existia no PRD/SPEC por ser fixo no código, e que nenhum projeto novo escreveu. */
+const FIXED_FICTION = [
+  'Carlos PM', 'Mariana Eng', 'Renata Silveira', 'Aprovado para Engenharia', '✅ Aprovado', 'Cielo', 'Stone', 'Rede)',
+  'conciliação', 'Lojistas', 'CNPJ', '85%', 'Validado via Discovery', 'R$ 1,00', 'CNAB', 'chargebacks', 'reconciliationEngine',
+  'TransactionRecord', '50,000', 'adquirentes', 'Severidade: Alta'
+];
+
+describe('PRD e SPEC de um projeto novo não carregam conteúdo fixo (E6.5)', () => {
+  let blank: DiscoveryProject;
+
+  beforeEach(() => {
+    localStorage.clear();
+    const id = storageService.createNewProject('Meu produto', 'Uma ideia nova').id;
+    blank = storageService.getAllProjects().find(p => p.id === id)!;
+  });
+
+  it('o PRD não tem nomes, aprovações, roadmap nem domínio que o usuário não escreveu', () => {
+    const prd = exportService.exportToPRD(blank);
+
+    for (const fixed of FIXED_FICTION) expect(prd.toLowerCase()).not.toContain(fixed.toLowerCase());
+  });
+
+  it('o SPEC não tem esquemas, diretórios nem requisitos de um domínio que o usuário não escreveu', () => {
+    const spec = exportService.exportToAISpec(blank);
+
+    for (const fixed of FIXED_FICTION) expect(spec.toLowerCase()).not.toContain(fixed.toLowerCase());
+  });
+
+  it('o PRD de um projeto novo é rascunho e diz o que falta, em vez de inventar', () => {
+    const prd = exportService.exportToPRD(blank);
+
+    expect(prd).toContain('**Status:** Rascunho');
+    expect(prd).toContain('Não informado');
+    expect(prd).toContain('Uma ideia nova');
+  });
+
+  it('usa o que o usuário escreveu, e só isso, nas seções de problema, público, valor e escopo', () => {
+    const filled: DiscoveryProject = {
+      ...blank,
+      prd: {
+        ...blank.prd, problemStatement: 'Pacientes faltam às consultas', targetAudience: 'Recepcionistas', valueProposition: 'Confirmar em minutos',
+        inScope: ['Lembrete por mensagem'], outOfScope: ['Remarcação'], successMetrics: ['Comparecimento acima de 85%'],
+        risksAndMitigations: [{ risk: 'Mensagens ignoradas', mitigation: 'Ligar para quem não responde' }]
+      }
+    };
+
+    const prd = exportService.exportToPRD(filled);
+
+    for (const written of ['Pacientes faltam às consultas', 'Recepcionistas', 'Confirmar em minutos', 'Lembrete por mensagem', 'Remarcação', 'Comparecimento acima de 85%', 'Mensagens ignoradas', 'Ligar para quem não responde']) {
+      expect(prd).toContain(written);
+    }
+    expect(prd).not.toContain('Previsto para fases futuras');
+  });
+
+  it('a tabela de aprovação lista os decisores e patrocinadores cadastrados, como pendentes', () => {
+    const withPeople: DiscoveryProject = {
+      ...blank,
+      stakeholders: [
+        { id: 'a', name: 'Ana Souza', role: 'decisor', interest: 'alto', influence: 'alto', createdAt: '2026-01-01T10:00:00.000Z' },
+        { id: 'b', name: 'Bruno Lima', role: 'patrocinador', interest: 'alto', influence: 'alto', createdAt: '2026-01-01T10:00:00.000Z' },
+        { id: 'c', name: 'Carla Dias', role: 'usuario', interest: 'alto', influence: 'baixo', createdAt: '2026-01-01T10:00:00.000Z' }
+      ]
+    };
+
+    const prd = exportService.exportToPRD(withPeople);
+
+    expect(prd).toContain('Ana Souza');
+    expect(prd).toContain('Bruno Lima');
+    expect(prd).not.toContain('Carla Dias');
+    expect(prd).toContain('Pendente');
+    expect(prd).not.toContain('Aprovado');
+  });
+
+  it('sem decisores cadastrados, diz que não há aprovações registradas', () => {
+    expect(exportService.exportToPRD(blank)).toContain('Nenhuma aprovação registrada');
+  });
+
+  it('o roadmap vem dos épicos do projeto, com status e data alvo', () => {
+    const withEpics: DiscoveryProject = {
+      ...blank,
+      epics: [
+        { id: 'e1', title: 'Lembretes', objective: 'o', businessValue: 'v', status: 'in_progress', targetDate: '2026-06-30', features: [] },
+        { id: 'e2', title: 'Relatórios', objective: 'o', businessValue: 'v', status: 'discovery', features: [] }
+      ]
+    };
+
+    const prd = exportService.exportToPRD(withEpics);
+
+    expect(prd).toContain('Lembretes');
+    expect(prd).toContain('2026-06-30');
+    expect(prd).toContain('Relatórios');
+  });
+
+  it('Definition of Ready e of Done vêm dos checklists das histórias, não de um texto padrão', () => {
+    const story = {
+      id: 's1', featureId: 'f1', title: 'Exportar', asA: 'a', iWantTo: 'b', soThat: 'c', acceptanceCriteria: [], tasks: [],
+      dorChecklist: [{ id: 'd1', label: 'Mockup aprovado', checked: true }],
+      dodChecklist: [{ id: 'd2', label: 'Testes passando', checked: false }]
+    };
+    const withChecklists: DiscoveryProject = {
+      ...blank,
+      epics: [{ id: 'e1', title: 'E', objective: '', businessValue: '', status: 'discovery', features: [{ id: 'f1', epicId: 'e1', title: 'F', description: '', valueProposition: '', effort: 'S', userStories: [story] }] }]
+    };
+
+    const prd = exportService.exportToPRD(withChecklists);
+
+    expect(prd).toContain('Mockup aprovado');
+    expect(prd).toContain('Testes passando');
+    expect(exportService.exportToPRD(blank)).toContain('Ainda não definidos');
+  });
+
+  it('o SPEC traz problema, escopo, métricas e riscos do projeto', () => {
+    const filled: DiscoveryProject = {
+      ...blank,
+      prd: {
+        ...blank.prd, problemStatement: 'Pacientes faltam às consultas', inScope: ['Lembrete por mensagem'], successMetrics: ['Comparecimento'],
+        risksAndMitigations: [{ risk: 'Mensagens ignoradas', mitigation: 'Ligar' }]
+      }
+    };
+
+    const spec = exportService.exportToAISpec(filled);
+
+    for (const written of ['Pacientes faltam às consultas', 'Lembrete por mensagem', 'Comparecimento', 'Mensagens ignoradas']) {
+      expect(spec).toContain(written);
     }
   });
 });
