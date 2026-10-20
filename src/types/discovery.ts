@@ -247,6 +247,8 @@ export interface ProjectNote {
   stakeholderId?: string;
   sessionId?: string;
   storyId?: string;
+  /** Decisão do Decision Log criada a partir desta anotação. */
+  decisionId?: string;
   createdAt: string;
   updatedAt: string;
 }

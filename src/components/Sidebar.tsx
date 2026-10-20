@@ -15,6 +15,7 @@ import {
   GitBranch,
   ArrowLeft,
   MessageCircle,
+  NotebookPen,
   Users
 } from 'lucide-react';
 
@@ -32,7 +33,8 @@ export type AppView =
   | 'knowledge_hub'
   | 'agent_studio'
   | 'stakeholders'
-  | 'interview';
+  | 'interview'
+  | 'notes';
 
 interface SidebarProps {
   activeView: AppView;
@@ -41,6 +43,7 @@ interface SidebarProps {
   epicCount: number;
   sessionCount: number;
   stakeholderCount?: number;
+  noteCount?: number;
   projectName?: string;
 }
 
@@ -51,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   epicCount,
   sessionCount,
   stakeholderCount = 0,
+  noteCount = 0,
   projectName
 }) => {
   type Item = { id: AppView; label: string; icon: React.ReactNode; badge?: string; highlight?: boolean };
@@ -62,6 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'project_hub', label: 'Hub do Projeto (Visão)', icon: <Rocket size={16} />, highlight: true },
         { id: 'stakeholders', label: 'Stakeholders', icon: <Users size={16} />, badge: stakeholderCount > 0 ? `${stakeholderCount}` : undefined },
+        { id: 'notes', label: 'Anotações', icon: <NotebookPen size={16} />, badge: noteCount > 0 ? `${noteCount}` : undefined },
         { id: 'brain_dashboard', label: 'Segundo Cérebro (C.O.D.E.)', icon: <Brain size={16} /> }
       ]
     },

@@ -42,6 +42,32 @@ describe('App: começo limpo', () => {
   });
 });
 
+describe('App: anotações', () => {
+  it('anotar, buscar e transformar em decisão e em história do backlog', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Criar Meu Primeiro Projeto/ }));
+    fireEvent.change(screen.getByLabelText(/Nome do Projeto/), { target: { value: 'Meu produto' } });
+    fireEvent.click(screen.getByRole('button', { name: /Criar e Começar Trabalho/ }));
+
+    fireEvent.click(await screen.findByRole('button', { name: /Anotações/ }));
+    fireEvent.change(await screen.findByLabelText('Nova anotação'), { target: { value: 'Adiar o lançamento\nO time pediu mais tempo.' } });
+    fireEvent.change(screen.getByLabelText('Etiquetas'), { target: { value: 'prazo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Adicionar anotação' }));
+
+    await waitFor(() => expect(storageService.getAllProjects()[0].notes).toHaveLength(1));
+    fireEvent.click(await screen.findByRole('button', { name: 'Virar decisão' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Virar história' }));
+
+    await waitFor(() => {
+      const project = storageService.getAllProjects()[0];
+      expect(project.decisionLog.map(d => d.decision)).toEqual(['Adiar o lançamento']);
+      expect(project.epics.find(e => e.title === 'Anotações do projeto')?.features[0].userStories).toHaveLength(1);
+    });
+    expect(await screen.findByText('Virou decisão')).toBeTruthy();
+    expect(screen.getByText('Virou história')).toBeTruthy();
+  });
+});
+
 describe('App: copiloto entrevistador', () => {
   it('responder e confirmar grava no PRD e avança para a próxima pergunta', async () => {
     render(<App />);

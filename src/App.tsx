@@ -21,6 +21,9 @@ import { NoticeToast } from './components/NoticeToast';
 import { StakeholdersView } from './components/StakeholdersView';
 import { InterviewView } from './components/InterviewView';
 import { applyAnswer, skipStep } from './services/interviewService';
+import { NotesView } from './components/NotesView';
+import { addNote, promoteToDecision, promoteToStory, removeNote, updateNote } from './services/noteService';
+import type { NoteInput } from './services/noteService';
 import { SessionPeopleBar } from './components/SessionPeopleBar';
 import {
   addStakeholder,
@@ -455,6 +458,43 @@ export const App: React.FC = () => {
     saveProject(skipStep(activeProject, stepId));
   };
 
+  const handleAddNote = (input: NoteInput) => {
+    try {
+      addNote(activeProject.id, input);
+      refresh();
+      showNotice('success', 'Anotação salva.');
+    } catch (e: unknown) {
+      showNotice('error', e instanceof Error ? e.message : 'Não foi possível salvar a anotação.');
+    }
+  };
+
+  const handleUpdateNote = (noteId: string, changes: Pick<NoteInput, 'text' | 'tags'>) => {
+    try {
+      updateNote(activeProject.id, noteId, changes);
+      refresh();
+    } catch (e: unknown) {
+      showNotice('error', e instanceof Error ? e.message : 'Não foi possível editar a anotação.');
+    }
+  };
+
+  const handleRemoveNote = (noteId: string) => {
+    removeNote(activeProject.id, noteId);
+    refresh();
+    showNotice('info', 'Anotação excluída.');
+  };
+
+  const handlePromoteNoteToDecision = (noteId: string) => {
+    promoteToDecision(activeProject.id, noteId);
+    refresh();
+    showNotice('success', 'Anotação registrada no Decision Log (PRD Vivo).');
+  };
+
+  const handlePromoteNoteToStory = (noteId: string) => {
+    promoteToStory(activeProject.id, noteId);
+    refresh();
+    showNotice('success', 'História criada no épico "Anotações do projeto" do Backlog.');
+  };
+
   const handleChangeSessionType = (sessionId: string, type: MeetingType) => {
     setSessionType(activeProject.id, sessionId, type);
     refresh();
@@ -792,6 +832,7 @@ export const App: React.FC = () => {
           epicCount={activeProject.epics.length}
           sessionCount={activeProject.sessions.length}
           stakeholderCount={(activeProject.stakeholders ?? []).length}
+          noteCount={(activeProject.notes ?? []).length}
           projectName={activeProject.name}
         />
       )}
@@ -847,6 +888,18 @@ export const App: React.FC = () => {
             onUpdate={handleUpdateStakeholder}
             onRemove={handleRemoveStakeholder}
             onOpenInterview={() => setActiveView('interview')}
+          />
+        )}
+
+        {/* VIEW: ANOTAÇÕES */}
+        {activeView === 'notes' && (
+          <NotesView
+            project={activeProject}
+            onAdd={handleAddNote}
+            onUpdate={handleUpdateNote}
+            onRemove={handleRemoveNote}
+            onPromoteToDecision={handlePromoteNoteToDecision}
+            onPromoteToStory={handlePromoteNoteToStory}
           />
         )}
 
