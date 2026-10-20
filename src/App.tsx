@@ -15,24 +15,21 @@ import {
   getActiveSessionContext,
   markQuestionAsked
 } from './services/sessionService';
-import { planBacklogMerge } from './services/backlogMerge';
 import { useProjects } from './state/useProjects';
 import { NoticeToast } from './components/NoticeToast';
 import { StakeholdersView } from './components/StakeholdersView';
 import { InterviewView } from './components/InterviewView';
 import { createProjectActions } from './state/projectActions';
 import { useHashView } from './state/useHashView';
+import { createBacklogActions } from './state/backlogActions';
 import { NotesView } from './components/NotesView';
 import { BacklogHealthPanel } from './components/BacklogHealthPanel';
 import { BacklogReviewPanel } from './components/BacklogReviewPanel';
 import { EvidencePanel } from './components/EvidencePanel';
-import { changeWithSnapshot, lastSnapshot, undoLast } from './services/backlogHistoryService';
+import { lastSnapshot } from './services/backlogHistoryService';
 import { StorySliceDialog } from './components/StorySliceDialog';
-import { sliceStory } from './services/slicingService';
-import type { StorySlicePart } from './services/slicingService';
-import { applyEvidence, suggestEvidence } from './services/evidenceService';
 import type { EvidenceSuggestion } from './services/evidenceService';
-import { applyProposals, mergeStories, planBacklogProposals, proposalsForMeetingType } from './services/backlogProposals';
+import { proposalsForMeetingType } from './services/backlogProposals';
 import { clearPendingReview, loadPendingReview, savePendingReview } from './state/pendingReviewStore';
 import type { PendingReview } from './state/pendingReviewStore';
 import { AgendaView } from './components/AgendaView';
@@ -726,118 +723,28 @@ export const App: React.FC = () => {
     ? activeProject.epics.flatMap(e => e.features).flatMap(f => f.userStories).find(s => s.id === slicingStoryId)
     : undefined;
 
-  const handleSliceStory = (parts: StorySlicePart[]) => {
-    if (!slicingStory) return;
-    const at = new Date().toISOString();
-    try {
-      update(activeProject.id, p =>
-        changeWithSnapshot(p, `Fatiou "${slicingStory.title}" em ${parts.length} histórias`, at, q => ({
-          ...q,
-          epics: sliceStory(q.epics, slicingStory.id, parts, { at, sessionId: currentSession?.id })
-        }))
-      );
-      setSlicingStoryId(null);
-      showNotice('success', `História fatiada em ${parts.length}. Dá para desfazer no painel de saúde do backlog.`);
-    } catch (e: unknown) {
-      showNotice('error', e instanceof Error ? e.message : 'Não foi possível fatiar a história.');
-    }
-  };
-
-  const handleMergeDuplicate = (keepId: string, dropId: string) => {
-    const at = new Date().toISOString();
-    update(activeProject.id, p =>
-      changeWithSnapshot(p, 'Mesclou histórias duplicadas', at, q => ({ ...q, epics: mergeStories(q.epics, keepId, dropId, { at, sessionId: currentSession?.id }) }))
-    );
-    showNotice('success', 'Histórias mescladas. Dá para desfazer no painel de saúde do backlog.');
-  };
-
-  const handleUndoBacklog = () => {
-    const snapshot = lastSnapshot(activeProject);
-    if (!snapshot) return;
-    update(activeProject.id, p => undoLast(p).project);
-    showNotice('info', `Desfeito: ${snapshot.label}.`);
-  };
-
-  const handleFindEvidence = () => {
-    const suggestions = suggestEvidence(activeProject);
-    if (suggestions.length === 0) {
-      setPendingEvidence(null);
-      showNotice('info', 'Nenhuma fala nova nas reuniões confirma ou contesta itens do backlog.');
-      return;
-    }
-    setPendingEvidence({ projectId: activeProject.id, suggestions });
-  };
-
-  const handleApplyEvidence = (acceptedIds: string[]) => {
-    if (!pendingEvidence) return;
-    const { suggestions } = pendingEvidence;
-    const at = new Date().toISOString();
-    update(activeProject.id, p =>
-      changeWithSnapshot(p, `Registrou ${acceptedIds.length} evidência(s) de reunião`, at, q => ({ ...q, epics: applyEvidence(q.epics, suggestions, acceptedIds, at) }))
-    );
-    setPendingEvidence(null);
-    showNotice('success', `${acceptedIds.length} evidência(s) registrada(s) no backlog.`);
-  };
-
-  const handleApplyReview = (acceptedIds: string[]) => {
-    if (!pendingReview) return;
-    const { proposals, sessionId } = pendingReview;
-    const at = new Date().toISOString();
-    update(activeProject.id, p =>
-      changeWithSnapshot(p, `Aplicou ${acceptedIds.length} proposta(s) da IA`, at, q => {
-        const next = applyProposals({ okrs: q.okrs, epics: q.epics, prd: q.prd }, proposals, acceptedIds, { at, sessionId });
-        return { ...q, okrs: next.okrs, epics: next.epics };
-      })
-    );
-    setPendingReview(null);
-    showNotice('success', `${acceptedIds.length} de ${proposals.length} proposta(s) aplicada(s) ao backlog.`);
-  };
-
-  const handleGenerateBacklogWithAI = async () => {
-    setIsGeneratingBacklog(true);
-    try {
-      const allTranscriptText = currentSession?.rawTranscript.map(t => `${t.speaker}: ${t.text}`).join('\n') || '';
-      const hasKey = !!storageService.getApiKey();
-      const result = await geminiService.generateFullBacklogAndPRD(
-        activeProject.name + ' - ' + activeProject.description,
-        allTranscriptText,
-        currentSession?.painPoints || [],
-        currentSession?.jtbds || []
-      );
-
-      if (result.source === 'offline') {
-        showNotice('error', result.error || 'Não foi possível gerar com a IA.');
-        // Com chave configurada, a falha não deve sobrescrever dados do usuário com exemplo
-        if (hasKey) return;
-      } else {
-        showNotice('success', 'Backlog e PRD gerados com a IA.');
-      }
-
-      // Nada entra no backlog sem o aceite do usuário: a IA gera propostas item a item, e a tela de revisão
-      // aplica só as aceitas, sobre o estado mais recente (o que ele editou durante a geração não é pisado).
-      const latest = storageService.getAllProjects().find(p => p.id === activeProject.id) ?? activeProject;
-      const latestData = { okrs: latest.okrs, epics: latest.epics, prd: latest.prd };
-
-      // O PRD só é preenchido quando ainda é um rascunho vazio; um PRD que o usuário escreveu não é tocado.
-      const prd = planBacklogMerge(latestData, result).merged.prd;
-      if (prd !== latest.prd) update(activeProject.id, p => ({ ...p, prd }));
-
-      const proposals = planBacklogProposals(latestData, result);
-      setActiveView('backlog');
-      if (proposals.length === 0) {
-        setPendingReview(null);
-        showNotice('info', 'A IA não trouxe nada novo nem diferente para o backlog.');
-      } else {
-        setPendingReview({ projectId: activeProject.id, sessionId: currentSession?.id, type: currentSession?.type, proposals });
-        showNotice('info', `A IA fez ${proposals.length} proposta(s) para o backlog. Revise e aplique o que quiser.`);
-      }
-    } catch (e: any) {
-      console.error(e);
-      showNotice('error', e?.message || 'Erro inesperado ao gerar o backlog.');
-    } finally {
-      setIsGeneratingBacklog(false);
-    }
-  };
+  const {
+    handleSliceStory,
+    handleMergeDuplicate,
+    handleUndoBacklog,
+    handleFindEvidence,
+    handleApplyEvidence,
+    handleApplyReview,
+    handleGenerateBacklogWithAI
+  } = createBacklogActions({
+    project: activeProject,
+    session: currentSession,
+    pendingReview,
+    pendingEvidence,
+    slicingStory,
+    update,
+    showNotice,
+    setPendingReview,
+    setPendingEvidence,
+    setSlicingStoryId,
+    setIsGenerating: setIsGeneratingBacklog,
+    openBacklog: () => setActiveView('backlog')
+  });
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
