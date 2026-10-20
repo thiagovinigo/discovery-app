@@ -18,6 +18,16 @@ import {
 import { planBacklogMerge } from './services/backlogMerge';
 import { useProjects } from './state/useProjects';
 import { NoticeToast } from './components/NoticeToast';
+import { StakeholdersView } from './components/StakeholdersView';
+import { SessionPeopleBar } from './components/SessionPeopleBar';
+import {
+  addStakeholder,
+  removeStakeholder,
+  setCurrentSpeaker,
+  setSessionParticipants,
+  updateStakeholder
+} from './services/stakeholderService';
+import type { StakeholderInput } from './services/stakeholderService';
 import { audioService, type AudioStatus } from './services/audioService';
 import { transcribeAudioWithWhisper } from './services/openAiClient';
 
@@ -397,6 +407,32 @@ export const App: React.FC = () => {
     refresh();
   };
 
+  const handleAddStakeholder = (input: StakeholderInput) => {
+    try {
+      addStakeholder(activeProject.id, input);
+      refresh();
+      showNotice('success', `${input.name} foi cadastrado(a) como stakeholder.`);
+    } catch (e: any) {
+      showNotice('error', e?.message || 'Não foi possível cadastrar o stakeholder.');
+    }
+  };
+
+  const handleUpdateStakeholder = (stakeholderId: string, changes: Partial<StakeholderInput>) => {
+    try {
+      updateStakeholder(activeProject.id, stakeholderId, changes);
+      refresh();
+      showNotice('success', 'Stakeholder atualizado.');
+    } catch (e: any) {
+      showNotice('error', e?.message || 'Não foi possível atualizar o stakeholder.');
+    }
+  };
+
+  const handleRemoveStakeholder = (stakeholderId: string) => {
+    removeStakeholder(activeProject.id, stakeholderId);
+    refresh();
+    showNotice('info', 'Stakeholder removido.');
+  };
+
   const handleStartFirstSession = () => {
     storageService.createNewSession(activeProject.id);
     refresh();
@@ -711,6 +747,7 @@ export const App: React.FC = () => {
           transcriptCount={currentSession?.rawTranscript.length || 0}
           epicCount={activeProject.epics.length}
           sessionCount={activeProject.sessions.length}
+          stakeholderCount={(activeProject.stakeholders ?? []).length}
           projectName={activeProject.name}
         />
       )}
@@ -755,6 +792,16 @@ export const App: React.FC = () => {
             project={activeProject}
             activeSession={currentSession}
             onNavigateToView={(view) => setActiveView(view)}
+          />
+        )}
+
+        {/* VIEW: STAKEHOLDERS */}
+        {activeView === 'stakeholders' && (
+          <StakeholdersView
+            project={activeProject}
+            onAdd={handleAddStakeholder}
+            onUpdate={handleUpdateStakeholder}
+            onRemove={handleRemoveStakeholder}
           />
         )}
 
@@ -822,6 +869,20 @@ export const App: React.FC = () => {
             onSelectSession={handleSelectSession}
             onCreateSession={handleCreateSession}
             onRenameSession={handleRenameSession}
+          />
+
+          <SessionPeopleBar
+            stakeholders={activeProject.stakeholders ?? []}
+            participantIds={currentSession.participantIds ?? []}
+            currentSpeakerId={currentSession.currentSpeakerId}
+            onChangeParticipants={(ids) => {
+              setSessionParticipants(activeProject.id, currentSession.id, ids);
+              refresh();
+            }}
+            onChangeSpeaker={(id) => {
+              setCurrentSpeaker(activeProject.id, currentSession.id, id);
+              refresh();
+            }}
           />
 
           <div style={{ margin: '0 -20px' }}>

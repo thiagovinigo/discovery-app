@@ -13,7 +13,8 @@ import {
   Sparkles,
   ShieldCheck,
   GitBranch,
-  ArrowLeft
+  ArrowLeft,
+  Users
 } from 'lucide-react';
 
 export type AppView =
@@ -28,7 +29,8 @@ export type AppView =
   | 'po_space'
   | 'product_audit'
   | 'knowledge_hub'
-  | 'agent_studio';
+  | 'agent_studio'
+  | 'stakeholders';
 
 interface SidebarProps {
   activeView: AppView;
@@ -36,6 +38,7 @@ interface SidebarProps {
   transcriptCount: number;
   epicCount: number;
   sessionCount: number;
+  stakeholderCount?: number;
   projectName?: string;
 }
 
@@ -45,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   transcriptCount,
   epicCount,
   sessionCount,
+  stakeholderCount = 0,
   projectName
 }) => {
   type Item = { id: AppView; label: string; icon: React.ReactNode; badge?: string; highlight?: boolean };
@@ -55,6 +59,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'Setup & Visão Geral',
       items: [
         { id: 'project_hub', label: 'Hub do Projeto (Visão)', icon: <Rocket size={16} />, highlight: true },
+        { id: 'stakeholders', label: 'Stakeholders', icon: <Users size={16} />, badge: stakeholderCount > 0 ? `${stakeholderCount}` : undefined },
         { id: 'brain_dashboard', label: 'Segundo Cérebro (C.O.D.E.)', icon: <Brain size={16} /> }
       ]
     },

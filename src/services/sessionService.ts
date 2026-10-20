@@ -22,6 +22,13 @@ function updateSession(
 
 const normalize = (text: string): string => text.toLowerCase().trim();
 
+/** A fala do entrevistado leva o id de quem a sala marcou como "falando agora", se houver. */
+function withSpeaker(segment: TranscriptSegment, session: MeetingSession): TranscriptSegment {
+  const isInterviewee = segment.speaker === 'Usuário / Stakeholder';
+  if (!isInterviewee || !session.currentSpeakerId || segment.speakerStakeholderId) return segment;
+  return { ...segment, speakerStakeholderId: session.currentSpeakerId };
+}
+
 /** Mescla o resultado de uma análise ao vivo na sessão, ignorando itens repetidos. */
 function mergeAnalysis(session: MeetingSession, projectName: string, analysis: AnalysisResponse): MeetingSession {
   const mindMapNodes = [...session.mindMapNodes];
@@ -92,7 +99,10 @@ export function appendSegments(
   sessionId: string,
   segments: TranscriptSegment[]
 ): DiscoveryProject | undefined {
-  return updateSession(projectId, sessionId, s => ({ ...s, rawTranscript: [...s.rawTranscript, ...segments] }));
+  return updateSession(projectId, sessionId, s => ({
+    ...s,
+    rawTranscript: [...s.rawTranscript, ...segments.map(seg => withSpeaker(seg, s))]
+  }));
 }
 
 /** Acrescenta uma fala ao fim da transcrição da sessão e persiste. */

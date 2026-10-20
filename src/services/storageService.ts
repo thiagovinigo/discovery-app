@@ -1,4 +1,5 @@
 import { DiscoveryProject, MeetingSession } from '../types/discovery';
+import { newId } from './ids';
 
 const STORAGE_KEY_PROJECTS = 'discovery_done_projects_v1';
 const STORAGE_KEY_ACTIVE_PROJECT_ID = 'discovery_done_active_project_id_v1';
@@ -7,14 +8,6 @@ const STORAGE_KEY_OPENAI_KEY = 'discovery_done_openai_api_key_v1';
 const STORAGE_KEY_OPENAI_MODEL = 'discovery_done_openai_model_v1';
 const STORAGE_KEY_GEMINI_KEY = 'discovery_done_gemini_api_key_v1';
 const STORAGE_KEY_GEMINI_MODEL = 'discovery_done_gemini_model_v1';
-
-/** Id único com prefixo legível. `Date.now()` sozinho repete quando dois itens nascem no mesmo milissegundo. */
-function newId(prefix: string): string {
-  const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-    ? crypto.randomUUID()
-    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  return `${prefix}-${unique}`;
-}
 
 // Gravações no IndexedDB entram numa fila para não se atropelarem: vale sempre a última.
 let mirrorQueue: Promise<void> = Promise.resolve();
@@ -111,7 +104,10 @@ export const storageService = {
       return parsed.map(p => ({
         ...p,
         personas: p.personas ?? [],
-        bugReports: p.bugReports ?? []
+        bugReports: p.bugReports ?? [],
+        stakeholders: p.stakeholders ?? [],
+        notes: p.notes ?? [],
+        scheduledMeetings: p.scheduledMeetings ?? []
       }));
     } catch (e) {
       console.error('Erro ao ler projetos do storage:', e);
@@ -233,7 +229,10 @@ export const storageService = {
       },
       decisionLog: [],
       personas: [],
-      bugReports: []
+      bugReports: [],
+      stakeholders: [],
+      notes: [],
+      scheduledMeetings: []
     };
 
     const projects = this.getAllProjects();

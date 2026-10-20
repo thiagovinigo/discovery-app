@@ -6,6 +6,8 @@ export interface TranscriptSegment {
   text: string;
   timestamp: string; // e.g. "04:12"
   isFinal: boolean;
+  /** Stakeholder cadastrado que disse a fala, quando a sala sabia quem estava falando. */
+  speakerStakeholderId?: string;
   highlightType?: 'pain' | 'jtbd' | 'solution' | 'metric';
 }
 
@@ -210,6 +212,66 @@ export interface MeetingSession {
   mindMapNodes: MindMapNode[];
   mindMapEdges: MindMapEdge[];
   userFlowSteps: UserFlowStep[];
+  /** Stakeholders cadastrados que participam desta reunião. */
+  participantIds?: string[];
+  /** Stakeholder que está falando agora; as próximas falas de "Usuário / Stakeholder" levam este id. */
+  currentSpeakerId?: string;
+  /** Reunião agendada que originou esta sala. */
+  scheduledMeetingId?: string;
+  type?: MeetingType;
+}
+
+export type StakeholderRole = 'decisor' | 'patrocinador' | 'usuario' | 'especialista' | 'impactado' | 'outro';
+export type StakeholderLevel = 'baixo' | 'medio' | 'alto';
+
+export interface Stakeholder {
+  id: string;
+  name: string;
+  role: StakeholderRole;
+  organization?: string;
+  jobTitle?: string;
+  interest: StakeholderLevel;
+  influence: StakeholderLevel;
+  /** Como prefere ser contatado. */
+  contact?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+/** Anotação livre do projeto, opcionalmente ligada a um stakeholder, reunião ou história. */
+export interface ProjectNote {
+  id: string;
+  text: string;
+  tags: string[];
+  stakeholderId?: string;
+  sessionId?: string;
+  storyId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type MeetingType = 'discovery' | 'alignment' | 'refinement';
+
+export interface ScheduledMeeting {
+  id: string;
+  title: string;
+  type: MeetingType;
+  /** Data e hora marcadas, em ISO-8601. */
+  startsAt: string;
+  objective: string;
+  agenda: string[];
+  participantIds: string[];
+  status: 'scheduled' | 'started' | 'cancelled';
+  /** Sala criada quando a reunião foi iniciada. */
+  sessionId?: string;
+  createdAt: string;
+}
+
+/** Respostas dadas ao copiloto entrevistador, por etapa. */
+export interface InterviewState {
+  answers: Record<string, string>;
+  skipped: string[];
+  completedAt?: string;
 }
 
 export interface PersonaItem {
@@ -250,4 +312,8 @@ export interface DiscoveryProject {
   decisionLog: DecisionLogEntry[];
   personas?: PersonaItem[];
   bugReports?: BugReportItem[];
+  stakeholders?: Stakeholder[];
+  notes?: ProjectNote[];
+  scheduledMeetings?: ScheduledMeeting[];
+  interview?: InterviewState;
 }
