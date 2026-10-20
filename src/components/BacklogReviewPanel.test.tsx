@@ -79,6 +79,22 @@ describe('BacklogReviewPanel', () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 
+  it('quando o tipo da conversa esconde propostas, avisa quantas e oferece mostrar todas', () => {
+    const onShowAll = vi.fn();
+    render(<BacklogReviewPanel proposals={[addStory]} onApply={vi.fn()} onDiscard={vi.fn()} hiddenCount={2} typeLabel="Discovery" onShowAll={onShowAll} />);
+
+    expect(screen.getByText('Mostrando o que importa numa conversa de Discovery. 2 propostas estão ocultas.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar todas' }));
+
+    expect(onShowAll).toHaveBeenCalled();
+  });
+
+  it('sem propostas ocultas, não mostra o aviso', () => {
+    renderPanel([addStory]);
+
+    expect(screen.queryByRole('button', { name: 'Mostrar todas' })).toBeNull();
+  });
+
   it('uma proposta de task mostra em qual história ela entra', () => {
     renderPanel([addTask]);
 

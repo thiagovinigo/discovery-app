@@ -34,6 +34,24 @@ describe('SessionClosingPanel', () => {
     expect(onSave).toHaveBeenCalledWith({ clear: 'Escopo fechado', open: '', nextAction: 'Ana envia o contrato' });
   });
 
+  it('oferece gerar as propostas de backlog desta reunião, só quando a tela permite', () => {
+    const onReviewBacklog = vi.fn();
+    render(<SessionClosingPanel onSave={vi.fn()} onReviewBacklog={onReviewBacklog} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Gerar propostas para o backlog' }));
+    expect(onReviewBacklog).toHaveBeenCalled();
+
+    cleanup();
+    render(<SessionClosingPanel onSave={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Gerar propostas para o backlog' })).toBeNull();
+  });
+
+  it('enquanto as propostas são geradas, o botão fica desabilitado', () => {
+    render(<SessionClosingPanel onSave={vi.fn()} onReviewBacklog={vi.fn()} isGenerating />);
+
+    expect((screen.getByRole('button', { name: 'Gerando propostas…' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('avisa quando o fechamento desta sala já foi salvo e permite atualizar', () => {
     render(<SessionClosingPanel savedNote={savedNote} onSave={vi.fn()} />);
 

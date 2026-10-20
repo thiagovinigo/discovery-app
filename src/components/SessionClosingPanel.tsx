@@ -8,6 +8,9 @@ interface SessionClosingPanelProps {
   /** Fechamento já salvo para esta sala, se houver. */
   savedNote?: ProjectNote;
   onSave: (answers: ClosingAnswers) => void;
+  /** Gera as propostas de backlog a partir desta reunião, para o usuário revisar na tela de Backlog. */
+  onReviewBacklog?: () => void;
+  isGenerating?: boolean;
 }
 
 const EMPTY_ANSWERS: ClosingAnswers = { clear: '', open: '', nextAction: '' };
@@ -18,7 +21,7 @@ const fieldStyle: React.CSSProperties = {
 };
 
 /** Na sala ao vivo: o copiloto fecha a reunião perguntando o que ficou claro, o que ficou em aberto e a próxima ação. */
-export const SessionClosingPanel: React.FC<SessionClosingPanelProps> = ({ savedNote, onSave }) => {
+export const SessionClosingPanel: React.FC<SessionClosingPanelProps> = ({ savedNote, onSave, onReviewBacklog, isGenerating = false }) => {
   const [answers, setAnswers] = useState<ClosingAnswers>(EMPTY_ANSWERS);
   const hasAnswer = Object.values(answers).some(value => value.trim());
 
@@ -38,6 +41,11 @@ export const SessionClosingPanel: React.FC<SessionClosingPanelProps> = ({ savedN
           <button type="button" className="btn btn-primary" disabled={!hasAnswer} onClick={() => onSave(answers)}>
             {savedNote ? 'Atualizar fechamento' : 'Salvar fechamento'}
           </button>
+          {onReviewBacklog && (
+            <button type="button" className="btn btn-secondary" disabled={isGenerating} onClick={onReviewBacklog}>
+              {isGenerating ? 'Gerando propostas…' : 'Gerar propostas para o backlog'}
+            </button>
+          )}
           {savedNote && <span style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>Fechamento já salvo em Anotações (etiqueta #fechamento).</span>}
         </div>
       </div>

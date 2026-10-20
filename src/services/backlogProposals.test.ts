@@ -4,6 +4,7 @@ import {
   findDuplicateStories,
   mergeStories,
   planBacklogProposals,
+  proposalsForMeetingType,
   sameTitle
 } from './backlogProposals';
 import type { BacklogData } from './backlogMerge';
@@ -196,6 +197,39 @@ describe('applyProposals', () => {
 
     expect(added.origin?.author).toBe('ai');
     expect(added.features[0].userStories[0].tasks[0].origin?.author).toBe('ai');
+  });
+});
+
+describe('proposalsForMeetingType', () => {
+  const existing = data([epic('E', [feature('F', [story('S', { iWantTo: 'exportar', tasks: [task('A')] })])])]);
+  const generated = data([
+    epic('E', [feature('F', [story('S', { iWantTo: 'exportar tudo', tasks: [task('A'), task('B')] }), story('Outra')])], { objective: 'novo obj' }),
+    epic('Novo épico')
+  ]);
+  const all = planBacklogProposals(existing, generated);
+  const summary = (list: typeof all) => list.map(p => `${p.kind}:${p.level}`).sort();
+
+  it('sem tipo definido ou numa entrevista, mostra tudo', () => {
+    expect(proposalsForMeetingType(all, undefined)).toEqual(all);
+    expect(proposalsForMeetingType(all, 'interview')).toEqual(all);
+  });
+
+  it('discovery mostra o que é novo (incrementos)', () => {
+    expect(summary(proposalsForMeetingType(all, 'discovery'))).toEqual(['add:epic', 'add:story', 'add:task']);
+  });
+
+  it('alinhamento mostra as alterações em itens que já existem', () => {
+    expect(summary(proposalsForMeetingType(all, 'alignment'))).toEqual(['update:epic', 'update:story']);
+  });
+
+  it('refinamento mostra só histórias e tasks', () => {
+    expect(summary(proposalsForMeetingType(all, 'refinement'))).toEqual(['add:story', 'add:task', 'update:story']);
+  });
+
+  it('os filtros nunca inventam propostas: o que aparece é subconjunto do pacote', () => {
+    for (const type of ['discovery', 'alignment', 'refinement'] as const) {
+      expect(proposalsForMeetingType(all, type).every(p => all.includes(p))).toBe(true);
+    }
   });
 });
 

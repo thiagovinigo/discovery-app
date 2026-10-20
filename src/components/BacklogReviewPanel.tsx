@@ -7,6 +7,11 @@ interface BacklogReviewPanelProps {
   /** Ids das propostas aceitas. */
   onApply: (acceptedIds: string[]) => void;
   onDiscard: () => void;
+  /** Quantas propostas do pacote estão ocultas pelo tipo da conversa. */
+  hiddenCount?: number;
+  /** Nome do tipo da conversa que está filtrando o pacote. */
+  typeLabel?: string;
+  onShowAll?: () => void;
 }
 
 const LEVEL_NOUN: Record<ProposalLevel, string> = { okr: 'OKR', epic: 'épico', feature: 'feature', story: 'história', task: 'task' };
@@ -21,7 +26,7 @@ const smallButton: React.CSSProperties = { padding: '4px 12px', fontSize: '0.78r
  * Revisão do backlog proposto pela IA: cada proposta é aceita ou rejeitada sozinha. Itens novos já vêm marcados;
  * alterações em itens que o usuário já tem vêm desmarcadas, para não pisar no que ele editou sem querer.
  */
-export const BacklogReviewPanel: React.FC<BacklogReviewPanelProps> = ({ proposals, onApply, onDiscard }) => {
+export const BacklogReviewPanel: React.FC<BacklogReviewPanelProps> = ({ proposals, onApply, onDiscard, hiddenCount = 0, typeLabel, onShowAll }) => {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(proposals.filter(p => p.kind === 'add').map(p => p.id)));
 
   const adds = proposals.filter(p => p.kind === 'add').length;
@@ -45,6 +50,12 @@ export const BacklogReviewPanel: React.FC<BacklogReviewPanelProps> = ({ proposal
         {`${plural(proposals.length, 'proposta', 'propostas')}: ${plural(adds, 'nova', 'novas')} e ${plural(updates, 'alteração', 'alterações')} em itens seus`}
       </p>
       <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--text-dim)' }}>Nada muda no backlog até você aplicar. Marque o que quer aceitar.</p>
+      {hiddenCount > 0 && onShowAll && (
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', fontSize: '0.78rem' }}>
+          <span>{`Mostrando o que importa numa conversa de ${typeLabel ?? 'este tipo'}. ${plural(hiddenCount, 'proposta está oculta', 'propostas estão ocultas')}.`}</span>
+          <button type="button" className="btn btn-secondary" style={smallButton} onClick={onShowAll}>Mostrar todas</button>
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {proposals.map(p => (

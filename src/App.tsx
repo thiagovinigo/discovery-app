@@ -31,8 +31,9 @@ import { sliceStory } from './services/slicingService';
 import type { StorySlicePart } from './services/slicingService';
 import { applyEvidence, suggestEvidence } from './services/evidenceService';
 import type { EvidenceSuggestion } from './services/evidenceService';
-import { applyProposals, mergeStories, planBacklogProposals } from './services/backlogProposals';
-import type { Proposal } from './services/backlogProposals';
+import { applyProposals, mergeStories, planBacklogProposals, proposalsForMeetingType } from './services/backlogProposals';
+import { clearPendingReview, loadPendingReview, savePendingReview } from './state/pendingReviewStore';
+import type { PendingReview } from './state/pendingReviewStore';
 import { AgendaView } from './components/AgendaView';
 import { SessionAgendaCard } from './components/SessionAgendaCard';
 import { SessionClosingPanel } from './components/SessionClosingPanel';
@@ -40,7 +41,7 @@ import { closingOf } from './services/meetingCopilotService';
 import { SessionPeopleBar } from './components/SessionPeopleBar';
 import { setCurrentSpeaker, setSessionParticipants } from './services/stakeholderService';
 import { AssistantPanel } from './components/AssistantPanel';
-import { runAssistant, setAssistantEnabled, setSessionType } from './services/assistantService';
+import { MEETING_TYPE_LABELS, runAssistant, setAssistantEnabled, setSessionType } from './services/assistantService';
 import type { MeetingType } from './types/discovery';
 import { audioService, type AudioStatus } from './services/audioService';
 import { transcribeAudioWithWhisper } from './services/openAiClient';
@@ -89,7 +90,15 @@ export const App: React.FC = () => {
   const [isAnalyzingLive, setIsAnalyzingLive] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [isAssistantBusy, setIsAssistantBusy] = useState(false);
-  const [pendingReview, setPendingReview] = useState<{ projectId: string; sessionId?: string; proposals: Proposal[] } | null>(null);
+  // O pacote de propostas da IA fica guardado: sobrevive a recarregar a página até o usuário revisar ou descartar
+  const [pendingReview, setPendingReviewState] = useState<PendingReview | null>(() => loadPendingReview());
+  const [showAllProposals, setShowAllProposals] = useState(false);
+  const setPendingReview = (next: PendingReview | null) => {
+    setPendingReviewState(next);
+    setShowAllProposals(false);
+    if (next) savePendingReview(next);
+    else clearPendingReview();
+  };
   const [slicingStoryId, setSlicingStoryId] = useState<string | null>(null);
   const [pendingEvidence, setPendingEvidence] = useState<{ projectId: string; suggestions: EvidenceSuggestion[] } | null>(null);
   const [notice, setNotice] = useState<{ type: 'error' | 'info' | 'success'; text: string } | null>(null);
@@ -818,7 +827,7 @@ export const App: React.FC = () => {
         setPendingReview(null);
         showNotice('info', 'A IA não trouxe nada novo nem diferente para o backlog.');
       } else {
-        setPendingReview({ projectId: activeProject.id, sessionId: currentSession?.id, proposals });
+        setPendingReview({ projectId: activeProject.id, sessionId: currentSession?.id, type: currentSession?.type, proposals });
         showNotice('info', `A IA fez ${proposals.length} proposta(s) para o backlog. Revise e aplique o que quiser.`);
       }
     } catch (e: any) {
@@ -1041,6 +1050,8 @@ export const App: React.FC = () => {
             key={currentSession.id}
             savedNote={closingOf(activeProject.notes ?? [], currentSession.id)}
             onSave={handleSaveClosing}
+            onReviewBacklog={handleGenerateBacklogWithAI}
+            isGenerating={isGeneratingBacklog}
           />
 
           <div style={{ margin: '0 -20px' }}>
@@ -1199,14 +1210,22 @@ export const App: React.FC = () => {
         {/* VIEW 2: BACKLOG & OKRS (DISCOVERY AO DONE) */}
         {activeView === 'backlog' && (
           <>
-          {pendingReview && pendingReview.projectId === activeProject.id && (
-            <BacklogReviewPanel
-              key={pendingReview.proposals.map(p => p.id).join('|')}
-              proposals={pendingReview.proposals}
-              onApply={handleApplyReview}
-              onDiscard={() => setPendingReview(null)}
-            />
-          )}
+          {pendingReview && pendingReview.projectId === activeProject.id && (() => {
+            const filtered = showAllProposals ? pendingReview.proposals : proposalsForMeetingType(pendingReview.proposals, pendingReview.type);
+            // Se o filtro do tipo esconderia tudo, mostra tudo em vez de uma tela vazia
+            const visible = filtered.length > 0 ? filtered : pendingReview.proposals;
+            return (
+              <BacklogReviewPanel
+                key={`${showAllProposals}-${visible.map(p => p.id).join('|')}`}
+                proposals={visible}
+                onApply={handleApplyReview}
+                onDiscard={() => setPendingReview(null)}
+                hiddenCount={pendingReview.proposals.length - visible.length}
+                typeLabel={pendingReview.type ? MEETING_TYPE_LABELS[pendingReview.type].title.split(' (')[0] : undefined}
+                onShowAll={() => setShowAllProposals(true)}
+              />
+            );
+          })()}
           {pendingEvidence && pendingEvidence.projectId === activeProject.id && (
             <EvidencePanel
               key={pendingEvidence.suggestions.map(s => s.id).join('|')}

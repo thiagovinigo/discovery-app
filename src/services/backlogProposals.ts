@@ -1,7 +1,7 @@
 import { logChange, stampOrigin } from './backlogItemService';
 import { plain } from './knowledgeService';
 import type { BacklogData, GeneratedBacklog } from './backlogMerge';
-import type { Epic, Feature, OKR, TechnicalTask, UserStory } from '../types/discovery';
+import type { Epic, Feature, MeetingType, OKR, TechnicalTask, UserStory } from '../types/discovery';
 
 export type ProposalLevel = 'okr' | 'epic' | 'feature' | 'story' | 'task';
 
@@ -188,6 +188,24 @@ export function planBacklogProposals(existing: BacklogData, generated: Generated
   }
 
   return proposals;
+}
+
+/**
+ * O que a revisão mostra primeiro, conforme o tipo da conversa: discovery propõe incrementos (itens novos);
+ * alinhamento, atualizações de itens existentes; refinamento, histórias e tasks. Entrevista, ou tipo desconhecido,
+ * mostra tudo. É só um filtro de exibição: o restante do pacote continua disponível.
+ */
+export function proposalsForMeetingType(proposals: Proposal[], type?: MeetingType): Proposal[] {
+  switch (type) {
+    case 'discovery':
+      return proposals.filter(p => p.kind === 'add');
+    case 'alignment':
+      return proposals.filter(p => p.kind === 'update');
+    case 'refinement':
+      return proposals.filter(p => p.level === 'story' || p.level === 'task');
+    default:
+      return proposals;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
