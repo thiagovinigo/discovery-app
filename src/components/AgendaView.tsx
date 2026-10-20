@@ -4,6 +4,7 @@ import type { DiscoveryProject, MeetingType, ScheduledMeeting } from '../types/d
 import { MEETING_TYPE_LABELS } from '../services/assistantService';
 import { isOverdue, parseAgenda, splitMeetings } from '../services/meetingService';
 import type { MeetingInput } from '../services/meetingService';
+import { buildAgenda } from '../services/meetingCopilotService';
 
 interface AgendaViewProps {
   project: DiscoveryProject;
@@ -96,6 +97,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ project, onSchedule, onS
   const namesOf = (meeting: ScheduledMeeting) =>
     meeting.participantIds.map(id => stakeholders.find(s => s.id === id)?.name).filter((n): n is string => !!n);
 
+  const suggestAgenda = () =>
+    setAgendaText(current => parseAgenda(`${current}\n${buildAgenda(project, type).join('\n')}`).join('\n'));
+
   const toggleParticipant = (id: string) =>
     setParticipantIds(current => (current.includes(id) ? current.filter(x => x !== id) : [...current, id]));
 
@@ -152,6 +156,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ project, onSchedule, onS
         <div>
           <label htmlFor="meeting-agenda" style={labelStyle}>Pauta (um item por linha)</label>
           <textarea id="meeting-agenda" value={agendaText} onChange={e => setAgendaText(e.target.value)} style={{ ...fieldStyle, minHeight: '70px' }} />
+          <button type="button" className="btn btn-secondary" style={{ ...smallButton, marginTop: '6px' }} onClick={suggestAgenda}>Sugerir pauta</button>
         </div>
         {stakeholders.length > 0 && (
           <fieldset style={{ border: 'none', padding: 0, margin: 0 }}>

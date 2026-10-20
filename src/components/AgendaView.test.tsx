@@ -71,6 +71,29 @@ describe('AgendaView: marcar reunião', () => {
   });
 });
 
+describe('AgendaView: sugerir pauta', () => {
+  it('preenche a pauta com o que falta saber no projeto, sem apagar o que já foi digitado', () => {
+    renderView();
+    fireEvent.change(screen.getByLabelText('Pauta (um item por linha)'), { target: { value: 'Item meu' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sugerir pauta' }));
+
+    const value = (screen.getByLabelText('Pauta (um item por linha)') as HTMLTextAreaElement).value;
+    expect(value.split('\n')[0]).toBe('Item meu');
+    expect(value).toContain('Problema: Qual problema ou oportunidade você quer resolver?');
+  });
+
+  it('sugerir duas vezes não repete os itens', () => {
+    renderView();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sugerir pauta' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sugerir pauta' }));
+
+    const lines = (screen.getByLabelText('Pauta (um item por linha)') as HTMLTextAreaElement).value.split('\n');
+    expect(new Set(lines).size).toBe(lines.length);
+  });
+});
+
 describe('AgendaView: próximas reuniões', () => {
   it('lista a mais cedo primeiro, com tipo, objetivo, pauta e participantes', () => {
     renderView([

@@ -28,6 +28,9 @@ import { AgendaView } from './components/AgendaView';
 import { SessionAgendaCard } from './components/SessionAgendaCard';
 import { cancelMeeting, removeMeeting, scheduleMeeting, startMeeting } from './services/meetingService';
 import type { MeetingInput } from './services/meetingService';
+import { SessionClosingPanel } from './components/SessionClosingPanel';
+import { closingOf, saveClosing } from './services/meetingCopilotService';
+import type { ClosingAnswers } from './services/meetingCopilotService';
 import { SessionPeopleBar } from './components/SessionPeopleBar';
 import {
   addStakeholder,
@@ -512,6 +515,17 @@ export const App: React.FC = () => {
     }
     setActiveView('live_room');
     showNotice('success', `Sala "${session.title}" aberta com a pauta e os participantes da agenda.`);
+  };
+
+  const handleSaveClosing = (answers: ClosingAnswers) => {
+    if (!currentSession) return;
+    try {
+      saveClosing(activeProject.id, currentSession, answers);
+      refresh();
+      showNotice('success', 'Fechamento da reunião salvo em Anotações.');
+    } catch (e: unknown) {
+      showNotice('error', e instanceof Error ? e.message : 'Não foi possível salvar o fechamento.');
+    }
   };
 
   const handleCancelMeeting = (meetingId: string) => {
@@ -1049,6 +1063,12 @@ export const App: React.FC = () => {
             onChangeType={(type) => handleChangeSessionType(currentSession.id, type)}
             onToggle={(enabled) => handleToggleAssistant(currentSession.id, enabled)}
             onRunNow={() => handleRunAssistantNow(currentSession.id)}
+          />
+
+          <SessionClosingPanel
+            key={currentSession.id}
+            savedNote={closingOf(activeProject.notes ?? [], currentSession.id)}
+            onSave={handleSaveClosing}
           />
 
           <div style={{ margin: '0 -20px' }}>

@@ -69,6 +69,27 @@ describe('App: agenda de reuniões', () => {
   });
 });
 
+describe('App: fechamento da reunião', () => {
+  it('encerrar a reunião com o copiloto grava uma anotação #fechamento ligada à sala', async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: /Criar Meu Primeiro Projeto/ }));
+    fireEvent.change(screen.getByLabelText(/Nome do Projeto/), { target: { value: 'Meu produto' } });
+    fireEvent.click(screen.getByRole('button', { name: /Criar e Começar Trabalho/ }));
+
+    fireEvent.click(await screen.findByRole('button', { name: /Gravação & Sala ao Vivo/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Iniciar primeira sessão/ }));
+    fireEvent.change(await screen.findByLabelText('O que ficou claro?'), { target: { value: 'Escopo fechado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar fechamento' }));
+
+    await waitFor(() => {
+      const project = storageService.getAllProjects()[0];
+      expect(project.notes).toHaveLength(1);
+      expect(project.notes![0]).toMatchObject({ tags: ['fechamento'], sessionId: project.sessions[0].id });
+    });
+    expect(await screen.findByRole('button', { name: 'Atualizar fechamento' })).toBeTruthy();
+  });
+});
+
 describe('App: anotações', () => {
   it('anotar, buscar e transformar em decisão e em história do backlog', async () => {
     render(<App />);
