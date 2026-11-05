@@ -76,4 +76,12 @@ describe('MinutesPanel', () => {
 
     expect(onGenerateBacklog).toHaveBeenCalled();
   });
+
+  it('oferece botões de exportação E12.6: Baixar .md, Obsidian (.md) e Baixar PDF', () => {
+    render(<MinutesPanel session={session(MINUTES)} projectName="Plataforma" onGenerate={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: /Baixar \.md/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Obsidian \(\.md\)/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Baixar PDF/i })).toBeTruthy();
+  });
 });

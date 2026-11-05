@@ -1,6 +1,18 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { storageService } from './storageService';
-import { applyLiveAnalysis, appendSegment, appendSegments, closeMeeting, getActiveSessionContext, markQuestionAsked } from './sessionService';
+import {
+  applyLiveAnalysis,
+  appendSegment,
+  appendSegments,
+  closeMeeting,
+  getActiveSessionContext,
+  getLiveAutoInterval,
+  markQuestionAsked,
+  recordIncomingSegment,
+  refreshLivePanels,
+  setLiveAutoInterval,
+  shouldAutoUpdateLiveRoom
+} from './sessionService';
 import type { AnalysisResponse } from './geminiService';
 import type { TranscriptSegment } from '../types/discovery';
 
@@ -297,5 +309,69 @@ describe('closeMeeting', () => {
 
   it('devolve undefined quando a sessão não existe', () => {
     expect(closeMeeting(projectId, 'nao-existe')).toBeUndefined();
+  });
+});
+
+describe('E12.4: atualização automática ao vivo a cada N falas e modo pausado', () => {
+  it('shouldAutoUpdateLiveRoom respeita o intervalo configurado e o modo pausado', () => {
+    expect(shouldAutoUpdateLiveRoom(1, 2, false)).toBe(false);
+    expect(shouldAutoUpdateLiveRoom(2, 2, false)).toBe(true);
+    expect(shouldAutoUpdateLiveRoom(4, 2, false)).toBe(true);
+    expect(shouldAutoUpdateLiveRoom(2, 2, true)).toBe(false);
+  });
+
+  it('getLiveAutoInterval e setLiveAutoInterval persistem o intervalo (padrão 2)', () => {
+    expect(getLiveAutoInterval()).toBe(2);
+    setLiveAutoInterval(3);
+    expect(getLiveAutoInterval()).toBe(3);
+  });
+
+  it('recordIncomingSegment atualiza mapa, jornada, story map e perguntas automaticamente a cada N falas sem clique', () => {
+    const r1 = recordIncomingSegment(
+      projectId,
+      sessionId,
+      { ...segment(1), text: 'Primeiro recebemos o pedido de compra dos clientes corporativos' },
+      { autoInterval: 2, paused: false }
+    );
+    expect(r1.triggeredAutoUpdate).toBe(false);
+
+    const r2 = recordIncomingSegment(
+      projectId,
+      sessionId,
+      { ...segment(2), text: 'Depois conferimos os pedidos de compra e sempre atrasa duas horas' },
+      { autoInterval: 2, paused: false }
+    );
+    expect(r2.triggeredAutoUpdate).toBe(true);
+
+    const session = currentSession();
+    expect(session.userFlowSteps.length).toBeGreaterThanOrEqual(2);
+    expect(session.mindMapNodes.some(n => n.type === 'topic')).toBe(true);
+    expect((session.storyMapCards ?? []).length).toBeGreaterThan(0);
+    expect(session.liveQuestions.length).toBeGreaterThan(0);
+  });
+
+  it('no modo pausado (Bate-Papo), grava a fala mas não dispara atualização automática nem chama IA', () => {
+    const r1 = recordIncomingSegment(
+      projectId,
+      sessionId,
+      { ...segment(1), text: 'Primeiro abrimos o painel' },
+      { autoInterval: 1, paused: true }
+    );
+    expect(r1.triggeredAutoUpdate).toBe(false);
+    expect(currentSession().rawTranscript).toHaveLength(1);
+    expect(currentSession().userFlowSteps).toHaveLength(0);
+  });
+
+  it('refreshLivePanels sincroniza perguntas, mapa, jornada e story map sem IA', () => {
+    appendSegments(projectId, sessionId, [
+      { ...segment(1), text: 'Primeiro cadastramos o prontuário médico do paciente' },
+      { ...segment(2), text: 'Depois revisamos o prontuário médico e sempre dá erro no convênio' }
+    ]);
+
+    refreshLivePanels(projectId, sessionId);
+
+    const session = currentSession();
+    expect(session.userFlowSteps.length).toBe(2);
+    expect(session.mindMapNodes.some(n => n.type === 'topic')).toBe(true);
   });
 });

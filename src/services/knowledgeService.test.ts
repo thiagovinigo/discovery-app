@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { storageService } from './storageService';
 import { addStakeholder, setCurrentSpeaker } from './stakeholderService';
 import { appendSegment } from './sessionService';
-import { searchProjectKnowledge } from './knowledgeService';
+import { cosineSimilarity, searchProjectKnowledge, searchProjectKnowledgeSemantic } from './knowledgeService';
 import type { DiscoveryProject, TranscriptSegment } from '../types/discovery';
 
 let projectId: string;
@@ -91,5 +91,48 @@ describe('searchProjectKnowledge', () => {
 
     expect(hits[0]).toMatchObject({ kind: 'prd', source: 'PRD' });
     expect(searchProjectKnowledge(load(), 'proposta valor')).toEqual([]);
+  });
+
+  it('E12.7: acha trechos equivalentes sem a palavra exata (expansão semântica por sinônimos/conceitos)', () => {
+    appendSegment(projectId, sessionId, seg('s1', 'O sistema trava e quebra toda vez que subimos a planilha'));
+    appendSegment(projectId, sessionId, seg('s2', 'O fechamento demora quatro horas e atrasa a equipe'));
+
+    const bugHits = searchProjectKnowledge(load(), 'onde ocorrem falhas e bugs?');
+    expect(bugHits).toHaveLength(1);
+    expect(bugHits[0].text).toContain('trava e quebra');
+
+    const slowHits = searchProjectKnowledge(load(), 'qual o gargalo de lentidão?');
+    expect(slowHits).toHaveLength(1);
+    expect(slowHits[0].text).toContain('demora quatro horas');
+  });
+
+  it('E12.7: searchProjectKnowledgeSemantic usa embeddings quando há chave OpenAI e faz fallback sem chave', async () => {
+    appendSegment(projectId, sessionId, seg('s1', 'Os médicos reclamam que o prontuário eletrônico é confuso'));
+    appendSegment(projectId, sessionId, seg('s2', 'A fatura mensal chega por correio'));
+
+    expect(cosineSimilarity([1, 0], [1, 0])).toBeCloseTo(1, 5);
+    expect(cosineSimilarity([1, 0], [0, 1])).toBeCloseTo(0, 5);
+
+    // Sem chave configurada -> fallback imediato para busca local
+    const offlineHits = await searchProjectKnowledgeSemantic(load(), 'prontuário médico');
+    expect(offlineHits[0].text).toContain('prontuário eletrônico');
+
+    // Com chave OpenAI configurada -> ranqueia por similaridade cosseno dos embeddings
+    storageService.setOpenAiApiKey('sk-test-embeddings');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        data: [
+          { embedding: [0.9, 0.1] }, // query
+          { embedding: [0.95, 0.05] }, // s1 (alta similaridade)
+          { embedding: [0.0, 1.0] } // s2 (baixa similaridade)
+        ]
+      })
+    } as Response);
+
+    const semanticHits = await searchProjectKnowledgeSemantic(load(), 'dificuldade clínica na tela de atendimento');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(semanticHits[0].text).toContain('prontuário eletrônico');
+    fetchSpy.mockRestore();
   });
 });

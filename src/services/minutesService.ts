@@ -145,3 +145,183 @@ export function minutesToMarkdown(minutes: MeetingMinutes, session: Pick<Meeting
     ''
   ].join('\n');
 }
+
+const wikiLink = (name: string): string => {
+  if (!name || name === UNDEFINED_VALUE || Object.values(GENERIC_SPEAKERS).includes(name)) return name;
+  return `[[${name.replace(/[\[\]]/g, '')}]]`;
+};
+
+/**
+ * Ata formatada como nota Markdown para Obsidian (E12.6):
+ * frontmatter YAML completo + wikilinks `[[Participante]]`, `[[Projeto]]` e `[[Assunto]]`, mantendo a mesma informação da ata padrão.
+ */
+export function minutesToObsidianMarkdown(
+  minutes: MeetingMinutes,
+  session: Pick<MeetingSession, 'title' | 'date' | 'durationSeconds' | 'objective' | 'type'>,
+  projectName?: string
+): string {
+  const safeQuote = (v: string) => `"${v.replace(/"/g, '\\"')}"`;
+  const meetingType = session.type ?? 'discovery';
+  const fmLines = [
+    '---',
+    `title: ${safeQuote(`Ata: ${session.title}`)}`,
+    `date: ${safeQuote(session.date)}`,
+    `generatedAt: ${safeQuote(minutes.generatedAt)}`,
+    `type: ${meetingType}`,
+    ...(projectName ? [`project: ${safeQuote(`[[${projectName}]]`)}`] : []),
+    `tags: [discovery, ata, ${meetingType}]`,
+    ...(minutes.participants.length
+      ? ['participants:', ...minutes.participants.map(p => `  - ${safeQuote(`[[${p}]]`)}`)]
+      : []),
+    '---',
+    ''
+  ];
+
+  const meta = [`**Data:** ${session.date}`];
+  if (session.durationSeconds > 0) meta.push(`**Duração:** ${Math.max(1, Math.round(session.durationSeconds / 60))} min`);
+  const header = [`# Ata: ${session.title}`, '', meta.join(' · ')];
+  if (projectName) header.push('', `**Projeto:** [[${projectName}]]`);
+  if (session.objective) header.push('', `**Objetivo:** ${session.objective}`);
+  if (minutes.participants.length) {
+    header.push('', `**Participantes:** ${minutes.participants.map(wikiLink).join(', ')}`);
+  }
+  header.push('', `> ${minutes.summary}`);
+
+  const topics = minutes.topics.flatMap(t => [
+    `### [[${t.title}]]`,
+    ...t.statements.map(s => `- **${wikiLink(s.speaker)}** (${s.timestamp}): ${s.text}`),
+    ''
+  ]);
+  const actions = minutes.actionItems.length
+    ? [
+        '| Ação | Responsável | Prazo |',
+        '|---|---|---|',
+        ...minutes.actionItems.map(a => `| ${cell(a.item)} | ${cell(wikiLink(a.owner))} | ${cell(a.deadline)} |`)
+      ]
+    : [];
+
+  return [
+    ...fmLines,
+    ...header,
+    ...section('Assuntos tratados', topics.length ? topics.slice(0, -1) : []),
+    ...section('Decisões', minutes.decisions.map(d => `- ${d.text} — ${wikiLink(d.speaker)} (${d.timestamp})`)),
+    ...section('Ações combinadas', actions),
+    ...section('Perguntas em aberto', minutes.openQuestions.map(q => `- [ ] ${q}`)),
+    ...section('Dores identificadas', minutes.painPoints.map(p => `- ${p}`)),
+    ...section('Jobs a serem feitos', minutes.jobs.map(j => `- ${j}`)),
+    ''
+  ].join('\n');
+}
+
+const escapeHtml = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+/**
+ * Gera um documento HTML limpo e autocontido da ata para impressão / exportação em PDF client-side (E12.6),
+ * garantindo exatamente a mesma informação da ata em `.md`.
+ */
+export function minutesToPrintableHtml(
+  minutes: MeetingMinutes,
+  session: Pick<MeetingSession, 'title' | 'date' | 'durationSeconds' | 'objective'>
+): string {
+  const durationMin = session.durationSeconds > 0 ? `${Math.max(1, Math.round(session.durationSeconds / 60))} min` : '';
+  const listHtml = (title: string, items: string[]) =>
+    items.length === 0
+      ? ''
+      : `<section><h2>${escapeHtml(title)}</h2><ul>${items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul></section>`;
+
+  const topicsHtml =
+    minutes.topics.length === 0
+      ? ''
+      : `<section><h2>Assuntos tratados</h2>${minutes.topics
+          .map(
+            t =>
+              `<h3>${escapeHtml(t.title)}</h3><ul>${t.statements
+                .map(s => `<li><strong>${escapeHtml(s.speaker)}</strong> (${escapeHtml(s.timestamp)}): ${escapeHtml(s.text)}</li>`)
+                .join('')}</ul>`
+          )
+          .join('')}</section>`;
+
+  const actionsHtml =
+    minutes.actionItems.length === 0
+      ? ''
+      : `<section><h2>Ações combinadas</h2><table><thead><tr><th>Ação</th><th>Responsável</th><th>Prazo</th></tr></thead><tbody>${minutes.actionItems
+          .map(
+            a =>
+              `<tr><td>${escapeHtml(a.item)}</td><td>${escapeHtml(a.owner)}</td><td>${escapeHtml(a.deadline)}</td></tr>`
+          )
+          .join('')}</tbody></table></section>`;
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Ata: ${escapeHtml(session.title)}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; margin: 32px; line-height: 1.5; }
+    h1 { font-size: 22px; margin: 0 0 8px; }
+    h2 { font-size: 16px; margin: 20px 0 8px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; }
+    h3 { font-size: 14px; margin: 12px 0 4px; }
+    p, li, td, th { font-size: 13px; }
+    .meta { color: #475569; margin-bottom: 12px; }
+    blockquote { margin: 12px 0; padding: 8px 12px; background: #f1f5f9; border-left: 3px solid #6366f1; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+    th { background: #f8fafc; }
+    @media print { body { margin: 12mm; } }
+  </style>
+</head>
+<body>
+  <h1>Ata: ${escapeHtml(session.title)}</h1>
+  <div class="meta"><strong>Data:</strong> ${escapeHtml(session.date)}${durationMin ? ` · <strong>Duração:</strong> ${escapeHtml(durationMin)}` : ''}</div>
+  ${session.objective ? `<p><strong>Objetivo:</strong> ${escapeHtml(session.objective)}</p>` : ''}
+  ${minutes.participants.length ? `<p><strong>Participantes:</strong> ${escapeHtml(minutes.participants.join(', '))}</p>` : ''}
+  <blockquote>${escapeHtml(minutes.summary)}</blockquote>
+  ${topicsHtml}
+  ${listHtml('Decisões', minutes.decisions.map(d => `${d.text} — ${d.speaker} (${d.timestamp})`))}
+  ${actionsHtml}
+  ${listHtml('Perguntas em aberto', minutes.openQuestions)}
+  ${listHtml('Dores identificadas', minutes.painPoints)}
+  ${listHtml('Jobs a serem feitos', minutes.jobs)}
+</body>
+</html>`;
+}
+
+/**
+ * Exporta um documento HTML (ata ou protótipo) em PDF direto no navegador (E12.6, sem servidor):
+ * cria um iframe oculto isolado e aciona a impressão em PDF do navegador (`contentWindow.print()`).
+ */
+export function exportHtmlToPdf(html: string, filenameBase: string): void {
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.setAttribute('data-pdf-export', filenameBase);
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument;
+  if (doc) {
+    doc.open();
+    doc.write(html);
+    doc.close();
+  }
+
+  try {
+    iframe.contentWindow?.focus();
+    iframe.contentWindow?.print?.();
+  } catch {
+    // Em ambientes de teste (jsdom) onde print não existe, apenas limpa o iframe
+  } finally {
+    setTimeout(() => {
+      iframe.remove();
+    }, 300);
+  }
+}

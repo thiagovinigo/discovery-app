@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import {
   Mic,
-  MicOff,
   ScreenShare,
   Upload,
   Play,
@@ -10,8 +9,7 @@ import {
   Info,
   Coffee,
   Activity,
-  Loader2,
-  FileAudio
+  Loader2
 } from 'lucide-react';
 import { audioService } from '../services/audioService';
 import { SIMULATION_SCENARIOS } from '../services/mockDataService';
@@ -26,6 +24,8 @@ interface AudioCaptureBarProps {
   isTranscribingAudio?: boolean;
   isInformalMode?: boolean;
   onToggleInformalMode?: () => void;
+  autoUpdateInterval?: number;
+  onChangeAutoUpdateInterval?: (interval: number) => void;
 }
 
 export const AudioCaptureBar: React.FC<AudioCaptureBarProps> = ({
@@ -37,7 +37,9 @@ export const AudioCaptureBar: React.FC<AudioCaptureBarProps> = ({
   onUploadAudioFile,
   isTranscribingAudio = false,
   isInformalMode = false,
-  onToggleInformalMode
+  onToggleInformalMode,
+  autoUpdateInterval = 2,
+  onChangeAutoUpdateInterval
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -220,7 +222,7 @@ export const AudioCaptureBar: React.FC<AudioCaptureBarProps> = ({
         />
       </div>
 
-      {/* Center: Audio Waveform Equalizer & Informal Toggle */}
+      {/* Center: Audio Waveform Equalizer, Auto-Update Interval & Informal Toggle */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <canvas
@@ -242,6 +244,33 @@ export const AudioCaptureBar: React.FC<AudioCaptureBarProps> = ({
             </span>
           )}
         </div>
+
+        {/* Intervalo de atualização automática (E12.4) */}
+        {onChangeAutoUpdateInterval && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.73rem', color: 'var(--text-muted)' }}>
+            <span>Auto-atualizar:</span>
+            <select
+              aria-label="Intervalo de atualização automática"
+              value={autoUpdateInterval}
+              disabled={isInformalMode}
+              onChange={(e) => onChangeAutoUpdateInterval(Number(e.target.value))}
+              style={{
+                background: 'rgba(15, 23, 42, 0.9)',
+                color: 'var(--text-main)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '6px',
+                padding: '4px 8px',
+                fontSize: '0.73rem',
+                cursor: isInformalMode ? 'not-allowed' : 'pointer'
+              }}
+            >
+              <option value={1}>A cada 1 fala</option>
+              <option value={2}>A cada 2 falas</option>
+              <option value={3}>A cada 3 falas</option>
+              <option value={5}>A cada 5 falas</option>
+            </select>
+          </label>
+        )}
 
         {/* Botão Modo Bate-Papo Informal */}
         {onToggleInformalMode && (

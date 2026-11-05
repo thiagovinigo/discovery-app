@@ -79,6 +79,42 @@ export interface UserFlowStep {
   manual?: boolean;
 }
 
+export type StoryMapRelease = 'mvp' | 'next';
+
+export interface StoryMapCard {
+  id: string;
+  /** Etapa da jornada (coluna) à qual o cartão pertence. */
+  stepId: string;
+  title: string;
+  asA: string;
+  iWantTo: string;
+  soThat: string;
+  release: StoryMapRelease;
+  quote?: string;
+  /** Criado ou editado pelo usuário: preservado ao atualizar o mapa. */
+  manual?: boolean;
+}
+
+export interface PrototypeScreen {
+  id: string;
+  stepNumber: number;
+  title: string;
+  actor: string;
+  goal: string;
+  fields: string[];
+  primaryAction: string;
+  secondaryActions: string[];
+  errorState?: string;
+  storyTitles: string[];
+}
+
+export interface SessionPrototype {
+  generatedAt: string;
+  source: 'offline' | 'ai';
+  screens: PrototypeScreen[];
+  html: string;
+}
+
 export interface AcceptanceCriteria {
   id: string;
   scenario: string;
@@ -285,6 +321,12 @@ export interface MeetingSession {
   mindMapNodes: MindMapNode[];
   mindMapEdges: MindMapEdge[];
   userFlowSteps: UserFlowStep[];
+  /** Cartões do User Story Mapping (E12.2), organizados pelas etapas da jornada e faixas de release. */
+  storyMapCards?: StoryMapCard[];
+  /** Ids de cartões derivados do story map que o usuário apagou, para a análise não os recriar. */
+  storyMapHiddenIds?: string[];
+  /** Protótipo navegável gerado a partir do story map e da jornada (E12.3). */
+  prototype?: SessionPrototype;
   /** Stakeholders cadastrados que participam desta reunião. */
   participantIds?: string[];
   /** Stakeholder que está falando agora; as próximas falas de "Usuário / Stakeholder" levam este id. */

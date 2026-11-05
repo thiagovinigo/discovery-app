@@ -1,7 +1,7 @@
 import { DiscoveryProject, MeetingSession } from '../types/discovery';
 import { storageService } from './storageService';
 import { callAI } from './aiClient';
-import { searchProjectKnowledge } from './knowledgeService';
+import { searchProjectKnowledge, searchProjectKnowledgeSemantic } from './knowledgeService';
 import type { KnowledgeHit } from './knowledgeService';
 import { isFilled } from './interviewService';
 import { ROLE_LABELS } from './stakeholderService';
@@ -351,7 +351,7 @@ export async function chatWithProject(
   session?: MeetingSession
 ): Promise<AgentResult> {
   const lastQuestion = [...history].reverse().find(m => m.role === 'user')?.text ?? '';
-  const hits = searchProjectKnowledge(project, lastQuestion, MAX_CHAT_HITS);
+  const hits = await searchProjectKnowledgeSemantic(project, lastQuestion, MAX_CHAT_HITS);
 
   const k = requireKey();
   if ('error' in k) return { text: answerFromHits(hits, 'Sem chave de IA, respondi só com a busca no projeto. '), offline: true };

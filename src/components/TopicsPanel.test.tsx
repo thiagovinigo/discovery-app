@@ -10,8 +10,9 @@ const talk = (text: string, speaker: TranscriptSegment['speaker'] = 'Usuário / 
   id: `t${++counter}`, speaker, text, timestamp: '00:10', isFinal: true
 });
 
-const session = (segments: TranscriptSegment[]): MeetingSession => ({
+const session = (segments: TranscriptSegment[], agenda: string[] = []): MeetingSession => ({
   id: 's1', title: 'Entrevista', date: '01/01/2026', durationSeconds: 0, participants: [], rawTranscript: segments,
+  agenda,
   summary: { tldr: '', mainTakeaways: [], actionItems: [], goldenQuotes: [] },
   liveQuestions: [], painPoints: [], jtbds: [], mindMapNodes: [], mindMapEdges: [], userFlowSteps: []
 });
@@ -23,7 +24,7 @@ describe('TopicsPanel', () => {
     expect(screen.getByText(/conforme o entrevistado fala/i)).toBeTruthy();
   });
 
-  it('lista os assuntos da conversa com o número de falas', () => {
+  it('lista os assuntos da conversa com o número de falas e o status da pauta viva (E12.1)', () => {
     render(<TopicsPanel session={session([
       talk('O fechamento é feito em planilhas e demora quatro dias'),
       talk('As planilhas quebram sempre que alguém muda uma fórmula'),
@@ -32,6 +33,7 @@ describe('TopicsPanel', () => {
 
     const item = screen.getByRole('listitem', { name: /Planilhas/i });
     expect(item.textContent).toMatch(/3 falas/);
+    expect(item.textContent).toMatch(/Tratado/);
   });
 
   it('mostra o que já foi coberto e o que falta em cada assunto', () => {
@@ -45,5 +47,21 @@ describe('TopicsPanel', () => {
     expect(within(item).getByText(/Impacto: falta/)).toBeTruthy();
     expect(within(item).getByText(/Frequência: falta/)).toBeTruthy();
     expect(within(item).getByText(/Alternativa: falta/)).toBeTruthy();
+  });
+
+  it('exibe dúvidas abertas e move dúvidas respondidas para o histórico (E12.1)', () => {
+    render(<TopicsPanel session={session([
+      talk('Como fica a alçada de compras quando o diretor sai de férias?'),
+      talk('Na alçada de compras durante férias, o gerente assume automaticamente.', 'Entrevistador (PM)'),
+      talk('O cadastro de fornecedores trava bastante'),
+      talk('O cadastro de fornecedores incomoda a equipe')
+    ])} />);
+
+    const doubtsSection = screen.getByLabelText('Dúvidas da conversa');
+    // A dúvida sobre cadastro (falta impacto) permanece aberta
+    expect(within(doubtsSection).getByText(/Qual o impacto concreto.*Fornecedores/i)).toBeTruthy();
+    // A pergunta sobre férias foi respondida pela fala seguinte e aparece no histórico de resolvidas
+    expect(within(doubtsSection).getByText(/Resolvidas \(1\)/i)).toBeTruthy();
+    expect(within(doubtsSection).getByText(/gerente assume automaticamente/i)).toBeTruthy();
   });
 });

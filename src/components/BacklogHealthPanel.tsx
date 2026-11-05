@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import type { Epic } from '../types/discovery';
 import { contestedItems, validationSummary } from '../services/backlogItemService';
-import { verifyBacklog } from '../services/verificationService';
+import { evaluateStoryTenPointChecklist, verifyBacklog } from '../services/verificationService';
 import { findDuplicateStories } from '../services/backlogProposals';
 
 interface BacklogHealthPanelProps {
@@ -26,6 +26,17 @@ export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, o
   const duplicates = useMemo(() => (onMergeDuplicate ? findDuplicateStories(epics) : []), [epics, onMergeDuplicate]);
   const verification = useMemo(() => verifyBacklog(epics), [epics]);
   const contested = useMemo(() => contestedItems(epics), [epics]);
+  const storyById = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof evaluateStoryTenPointChecklist>>();
+    for (const e of epics) {
+      for (const f of e.features) {
+        for (const s of f.userStories) {
+          map.set(s.id, evaluateStoryTenPointChecklist(s));
+        }
+      }
+    }
+    return map;
+  }, [epics]);
 
   if (validation.total === 0) return null;
 
@@ -102,25 +113,42 @@ export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, o
         <details>
           <summary style={{ cursor: 'pointer', fontSize: '0.8rem', fontWeight: 700 }}>{`Histórias com lacunas (${withGaps.length})`}</summary>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-            {withGaps.map(s => (
-              <div key={s.storyId} role="group" aria-label={s.title} style={cardStyle}>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <strong style={{ fontSize: '0.82rem' }}>{s.title}</strong>
-                  {onSliceStory && s.gaps.some(g => g.code === 'too-big') && (
-                    <button type="button" className="btn btn-secondary" style={{ padding: '2px 10px', fontSize: '0.72rem' }} onClick={() => onSliceStory(s.storyId)}>
-                      {`Fatiar "${s.title}"`}
-                    </button>
-                  )}
+            {withGaps.map(s => {
+              const tenPt = storyById.get(s.storyId);
+              return (
+                <div key={s.storyId} role="group" aria-label={s.title} style={cardStyle}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <strong style={{ fontSize: '0.82rem' }}>{s.title}</strong>
+                    {tenPt && (
+                      <span
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 700,
+                          padding: '1px 7px',
+                          borderRadius: '999px',
+                          color: tenPt.go ? '#34d399' : '#fcd34d',
+                          background: tenPt.go ? 'rgba(16, 185, 129, 0.14)' : 'rgba(245, 158, 11, 0.14)'
+                        }}
+                      >
+                        {`Checklist: ${tenPt.score}/10 (${tenPt.go ? 'GO' : 'Ajustar'})`}
+                      </span>
+                    )}
+                    {onSliceStory && s.gaps.some(g => g.code === 'too-big') && (
+                      <button type="button" className="btn btn-secondary" style={{ padding: '2px 10px', fontSize: '0.72rem' }} onClick={() => onSliceStory(s.storyId)}>
+                        {`Fatiar "${s.title}"`}
+                      </button>
+                    )}
+                  </div>
+                  <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px', fontSize: '0.76rem' }}>
+                    {s.gaps.map((gap, i) => (
+                      <li key={i} style={{ color: gap.severity === 'blocker' ? '#fda4af' : 'var(--text-muted)' }}>
+                        {gap.severity === 'blocker' ? `Bloqueia: ${gap.message}` : gap.message}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <ul style={{ margin: '4px 0 0 0', paddingLeft: '18px', fontSize: '0.76rem' }}>
-                  {s.gaps.map((gap, i) => (
-                    <li key={i} style={{ color: gap.severity === 'blocker' ? '#fda4af' : 'var(--text-muted)' }}>
-                      {gap.severity === 'blocker' ? `Bloqueia: ${gap.message}` : gap.message}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </details>
       )}

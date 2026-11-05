@@ -10,7 +10,6 @@ vi.mock('./aiClient', async importOriginal => {
 
 const callAIMock = vi.mocked(callAI);
 
-// Falante neutro: a heurística analisa o texto COM o rótulo do falante, e "Usuário" é palavra-chave de cliente
 const say = (text: string, speaker = 'Entrevistado') => [{ speaker, text }];
 const analyzeOffline = (text: string) => geminiService.analyzeLiveConversation(say(text), 'Contexto');
 
@@ -28,21 +27,37 @@ describe('geminiService.analyzeLiveConversation: sem chave (heurística offline)
     expect(result.error).toBeUndefined();
   });
 
-  it('fala sobre demora gera dor de tempo, nó no mapa, etapa crítica e pergunta de quantificação', async () => {
-    const result = await analyzeOffline('Esse processo tem muita demora e fila');
+  it('fala sobre demora extrai dor, nó no mapa, etapa crítica e pergunta de quantificação a partir da fala real', async () => {
+    const result = await analyzeOffline('A triagem de pacientes tem muita demora e fila na recepção');
 
     expect(result.newPainPoints.map(p => p.severity)).toEqual(['high']);
-    expect(result.newMindMapNodes.map(n => n.label)).toEqual(['Gargalo de Tempo & Demora']);
-    expect(result.newUserFlowSteps.map(s => [s.title, s.frictionLevel])).toEqual([['Espera & Processamento Lento', 'critical']]);
+    expect(result.newPainPoints[0].description.toLowerCase()).toContain('triagem de pacientes');
+    expect(result.newMindMapNodes[0].type).toBe('pain');
+    expect(result.newMindMapNodes[0].label.toLowerCase()).toContain('triagem');
+    expect(result.newUserFlowSteps[0].frictionLevel).toBe('critical');
+    expect(result.newUserFlowSteps[0].title.toLowerCase()).toContain('triagem');
     expect(result.newQuestions.map(q => q.category)).toContain('quantification');
   });
 
-  it('fala sobre planilha manual gera dor e um job a ser feito', async () => {
-    const result = await analyzeOffline('Fazemos tudo manualmente numa planilha');
+  it('fala sobre planilha manual extrai dor e job com as palavras do entrevistado (sem texto fixo financeiro)', async () => {
+    const result = await analyzeOffline('Fazemos o controle de estoque manualmente numa planilha');
 
-    expect(result.newMindMapNodes.map(n => n.label)).toContain('Dependência de Planilhas');
+    expect(result.newPainPoints[0].description.toLowerCase()).toContain('controle de estoque');
+    expect(result.newMindMapNodes.some(n => n.label.toLowerCase().includes('planilha') || n.label.toLowerCase().includes('estoque'))).toBe(true);
     expect(result.newJtbds).toHaveLength(1);
-    expect(result.newJtbds[0].job).toContain('Substituir conferência manual');
+    expect(result.newJtbds[0].job.toLowerCase()).toContain('controle de estoque');
+    expect(result.newJtbds[0].job.toLowerCase()).not.toContain('transação');
+    expect(result.newJtbds[0].outcome.toLowerCase()).not.toContain('divergências');
+  });
+
+  it('não injeta termos financeiros fixos quando a conversa é de outro domínio (E11.10)', async () => {
+    const result = await analyzeOffline('O aluno reclama no suporte porque a aula trava no celular');
+    const serialized = JSON.stringify(result).toLowerCase();
+
+    expect(serialized).not.toContain('transação');
+    expect(serialized).not.toContain('conciliação');
+    expect(serialized).not.toContain('ciclo de entrega');
+    expect(result.newPainPoints[0].description.toLowerCase()).toContain('aula trava');
   });
 
   it('guarda no máximo 120 caracteres da fala como citação da dor, sem o rótulo do falante', async () => {
@@ -55,28 +70,28 @@ describe('geminiService.analyzeLiveConversation: sem chave (heurística offline)
   it('o rótulo do falante não conta como assunto: "Usuário" não dispara a regra de cliente (E5.4)', async () => {
     const result = await geminiService.analyzeLiveConversation(say('Ontem fomos almoçar juntos', 'Usuário / Stakeholder'), 'Contexto');
 
-    expect(result.newMindMapNodes.map(n => n.label)).not.toContain('Atrito com o Cliente');
     expect(result.newQuestions.map(q => q.category)).not.toContain('risk_validation');
     expect(result.newJtbds).toEqual([]);
   });
 
-  it('quando a fala realmente fala de cliente, a regra de cliente dispara', async () => {
-    const result = await geminiService.analyzeLiveConversation(say('O cliente ameaçou cancelar o contrato', 'Usuário / Stakeholder'), 'Contexto');
+  it('quando a fala realmente fala de cliente, a regra de cliente dispara com os termos da fala', async () => {
+    const result = await geminiService.analyzeLiveConversation(say('O cliente ameaçou cancelar o contrato de manutenção', 'Usuário / Stakeholder'), 'Contexto');
 
-    expect(result.newMindMapNodes.map(n => n.label)).toContain('Atrito com o Cliente');
+    expect(result.newMindMapNodes.some(n => n.type === 'opportunity')).toBe(true);
     expect(result.newQuestions.map(q => q.category)).toContain('risk_validation');
+    expect(result.newJtbds[0].job.toLowerCase()).toContain('cliente ameaçou cancelar');
   });
 
   it('analisa todas as falas recentes, não só a última', async () => {
     const result = await geminiService.analyzeLiveConversation(
-      [{ speaker: 'PM', text: 'Como é o processo hoje?' }, { speaker: 'Entrevistado', text: 'Tudo em planilha' }],
+      [{ speaker: 'PM', text: 'Como é o processo hoje?' }, { speaker: 'Entrevistado', text: 'Tudo em planilha de agendamento' }],
       'Contexto'
     );
 
-    expect(result.newMindMapNodes.map(n => n.label)).toContain('Dependência de Planilhas');
+    expect(result.newPainPoints.some(p => p.description.toLowerCase().includes('planilha de agendamento'))).toBe(true);
   });
 
-  it('fala sem palavras-chave vira um tópico genérico mais uma pergunta de 5 Porquês', async () => {
+  it('fala sem palavras-chave vira um tópico extraído da fala mais uma pergunta de 5 Porquês', async () => {
     const result = await analyzeOffline('Ontem fomos almoçar juntos');
 
     expect(result.newMindMapNodes).toHaveLength(1);

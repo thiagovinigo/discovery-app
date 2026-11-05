@@ -1,10 +1,16 @@
 import React, { useState } from 'react';
-import { ClipboardCheck, Copy, Download, FileText, RefreshCw, Sparkles } from 'lucide-react';
-import { minutesToMarkdown } from '../services/minutesService';
+import { BookOpen, ClipboardCheck, Copy, Download, FileDown, FileText, RefreshCw, Sparkles } from 'lucide-react';
+import {
+  exportHtmlToPdf,
+  minutesToMarkdown,
+  minutesToObsidianMarkdown,
+  minutesToPrintableHtml
+} from '../services/minutesService';
 import type { MeetingSession } from '../types/discovery';
 
 interface MinutesPanelProps {
   session: MeetingSession;
+  projectName?: string;
   /** Gera (ou gera de novo) a ata a partir da conversa. */
   onGenerate: () => void;
   /** Leva o que a reunião trouxe para o backlog, pelo painel de revisão. */
@@ -25,11 +31,19 @@ const Section: React.FC<{ title: string; items: React.ReactNode[] }> = ({ title,
     </>
   );
 
-export const MinutesPanel: React.FC<MinutesPanelProps> = ({ session, onGenerate, onGenerateBacklog, isGeneratingBacklog = false }) => {
+export const MinutesPanel: React.FC<MinutesPanelProps> = ({
+  session,
+  projectName,
+  onGenerate,
+  onGenerateBacklog,
+  isGeneratingBacklog = false
+}) => {
   const [copied, setCopied] = useState(false);
   const minutes = session.minutes;
 
+  const slug = session.title.replace(/[^\p{L}\p{N}]+/gu, '_').toLowerCase() || 'reuniao';
   const markdown = () => (minutes ? minutesToMarkdown(minutes, session) : '');
+  const obsidianMarkdown = () => (minutes ? minutesToObsidianMarkdown(minutes, session, projectName) : '');
 
   const copy = async () => {
     try {
@@ -41,14 +55,23 @@ export const MinutesPanel: React.FC<MinutesPanelProps> = ({ session, onGenerate,
     }
   };
 
-  const download = () => {
-    const blob = new Blob([markdown()], { type: 'text/markdown;charset=utf-8' });
+  const downloadTextFile = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `ata_${session.title.replace(/[^\p{L}\p{N}]+/gu, '_').toLowerCase()}.md`;
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const download = () => downloadTextFile(markdown(), `ata_${slug}.md`);
+
+  const downloadObsidian = () => downloadTextFile(obsidianMarkdown(), `obsidian_ata_${slug}.md`);
+
+  const downloadPdf = () => {
+    if (!minutes) return;
+    exportHtmlToPdf(minutesToPrintableHtml(minutes, session), `ata_${slug}`);
   };
 
   return (
@@ -68,6 +91,22 @@ export const MinutesPanel: React.FC<MinutesPanelProps> = ({ session, onGenerate,
             </button>
             <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }} onClick={download}>
               <Download size={12} /> Baixar .md
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }}
+              onClick={downloadObsidian}
+              title="Baixar nota Markdown para Obsidian com frontmatter YAML e wikilinks [[Participante]]"
+            >
+              <BookOpen size={12} /> Obsidian (.md)
+            </button>
+            <button
+              className="btn btn-secondary"
+              style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }}
+              onClick={downloadPdf}
+              title="Exportar a ata em PDF no navegador (sem servidor)"
+            >
+              <FileDown size={12} /> Baixar PDF
             </button>
           </div>
         )}

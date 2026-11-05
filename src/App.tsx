@@ -3,23 +3,36 @@ import {
   ChecklistItem,
   DiscoveryProject,
   MeetingSession,
+  StoryMapRelease,
   TranscriptSegment
 } from './types/discovery';
 import { storageService } from './services/storageService';
 import { geminiService } from './services/geminiService';
 import {
-  appendSegment,
   appendSegments,
   applyLiveAnalysis,
   closeMeeting,
   editMindMap,
   getActiveSessionContext,
+  getLiveAutoInterval,
   markQuestionAsked,
+  recordIncomingSegment,
   refreshJourney,
-  refreshMindMap
+  refreshMindMap,
+  refreshStoryMap,
+  setLiveAutoInterval
 } from './services/sessionService';
 import { addStep, moveStep, removeStep, updateStep } from './services/journeyService';
 import { addChildNode, deleteNode, renameNode } from './services/mindMapService';
+import {
+  addStoryMapCard,
+  moveStoryMapCard,
+  proposeStoryMapToBacklog,
+  removeStoryMapCard,
+  updateStoryMapCard
+} from './services/storyMapService';
+import { buildOfflinePrototype, generatePrototypeWithAI } from './services/prototypeService';
+import { buildWhisperPrompt } from './services/whisperFilter';
 import { useProjects } from './state/useProjects';
 import { NoticeToast } from './components/NoticeToast';
 import { StakeholdersView } from './components/StakeholdersView';
@@ -48,7 +61,7 @@ import { AssistantPanel } from './components/AssistantPanel';
 import { MEETING_TYPE_LABELS, runAssistant, setAssistantEnabled, setSessionType } from './services/assistantService';
 import type { MeetingType } from './types/discovery';
 import { audioService, type AudioStatus } from './services/audioService';
-import { transcribeAudioWithWhisper } from './services/openAiClient';
+import { inferSpeakerTurnsFromWhisper, transcribeAudioWithWhisper } from './services/openAiClient';
 
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -57,6 +70,8 @@ import { LiveQuestionPrompter } from './components/LiveQuestionPrompter';
 import { LiveTranscriptionView } from './components/LiveTranscriptionView';
 import { MindMapCanvas } from './components/MindMapCanvas';
 import { UserFlowView } from './components/UserFlowView';
+import { StoryMapView } from './components/StoryMapView';
+import { PrototypeView } from './components/PrototypeView';
 import { DiscoveryToDoneView } from './components/DiscoveryToDoneView';
 import { ProjectDocumentationView } from './components/ProjectDocumentationView';
 import { AgileKnowledgeHubView } from './components/AgileKnowledgeHubView';
@@ -87,17 +102,21 @@ import {
   Keyboard,
   Flag,
   Layers,
-  FileText
+  FileText,
+  LayoutGrid,
+  Monitor
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-type RightTab = 'topics' | 'mindmap' | 'userflow' | 'minutes';
+type RightTab = 'topics' | 'mindmap' | 'userflow' | 'storymap' | 'prototype' | 'minutes';
 
 /** Painéis ao lado da conversa: o que ela vai produzindo, na ordem em que o PO costuma usar. */
 const RIGHT_TABS: { id: RightTab; label: string; Icon: LucideIcon; count: (s: MeetingSession) => string }[] = [
   { id: 'topics', label: 'Tópicos & Perguntas', Icon: Layers, count: s => `${s.liveQuestions.filter(q => !q.asked).length} a fazer` },
   { id: 'mindmap', label: 'Mapa mental', Icon: GitBranch, count: s => `${s.mindMapNodes.length} nós` },
   { id: 'userflow', label: 'Jornada', Icon: Workflow, count: s => `${s.userFlowSteps.length} etapas` },
+  { id: 'storymap', label: 'Story Map', Icon: LayoutGrid, count: s => `${(s.storyMapCards ?? []).length} histórias` },
+  { id: 'prototype', label: 'Protótipo', Icon: Monitor, count: s => `${s.userFlowSteps.length} telas` },
   { id: 'minutes', label: 'Ata', Icon: FileText, count: s => (s.minutes ? 'pronta' : 'a gerar') }
 ];
 
@@ -112,6 +131,7 @@ export const App: React.FC = () => {
   const [isAnalyzingLive, setIsAnalyzingLive] = useState(false);
   const [isTranscribingAudio, setIsTranscribingAudio] = useState(false);
   const [isAssistantBusy, setIsAssistantBusy] = useState(false);
+  const [isGeneratingPrototype, setIsGeneratingPrototype] = useState(false);
   // O pacote de propostas da IA fica guardado: sobrevive a recarregar a página até o usuário revisar ou descartar
   const [pendingReview, setPendingReviewState] = useState<PendingReview | null>(() => loadPendingReview());
   const [showAllProposals, setShowAllProposals] = useState(false);
@@ -129,6 +149,7 @@ export const App: React.FC = () => {
   // New Specialist backlog features: Focus Mode & Informal Chat Mode
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isInformalChatMode, setIsInformalChatMode] = useState(false);
+  const [autoUpdateInterval, setAutoUpdateIntervalState] = useState<number>(() => getLiveAutoInterval());
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const liveFileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -137,9 +158,18 @@ export const App: React.FC = () => {
   const lastAiErrorRef = useRef<string>('');
   // O callback de áudio nasce uma vez e enxergaria o valor antigo do estado; o ref sempre tem o atual
   const isInformalChatRef = useRef(false);
+  const autoUpdateIntervalRef = useRef(autoUpdateInterval);
   useEffect(() => {
     isInformalChatRef.current = isInformalChatMode;
   }, [isInformalChatMode]);
+  useEffect(() => {
+    autoUpdateIntervalRef.current = autoUpdateInterval;
+  }, [autoUpdateInterval]);
+
+  const handleChangeAutoUpdateInterval = (nextInterval: number) => {
+    setLiveAutoInterval(nextInterval);
+    setAutoUpdateIntervalState(getLiveAutoInterval());
+  };
 
   const showNotice = useCallback((type: 'error' | 'info' | 'success', text: string) => {
     setNotice({ type, text });
@@ -198,8 +228,14 @@ export const App: React.FC = () => {
         : undefined
     };
 
-    const withSegment = appendSegment(project.id, session.id, newSeg);
+    const { project: withSegment, triggeredAutoUpdate } = recordIncomingSegment(project.id, session.id, newSeg, {
+      autoInterval: autoUpdateIntervalRef.current,
+      paused: isInformalChatRef.current
+    });
     if (withSegment) refresh();
+
+    // Modo Bate-Papo Informal (pausado): salva a fala sem acionar IA (economiza tokens e preserva foco)
+    if (isInformalChatRef.current) return;
 
     // Assistente ligado: acompanha cada fala nova, conforme o tipo da conversa
     if (session.assistant?.enabled) {
@@ -208,8 +244,7 @@ export const App: React.FC = () => {
       });
     }
 
-    // Modo Bate-Papo Informal: salva a fala sem acionar IA (economiza tokens e preserva foco)
-    if (isInformalChatRef.current) return;
+    if (!triggeredAutoUpdate) return;
 
     const recent = [...session.rawTranscript, newSeg].slice(-4).map(s => ({ speaker: s.speaker, text: s.text }));
     const analysis = await geminiService.analyzeLiveConversation(recent, project.description);
@@ -647,7 +682,8 @@ export const App: React.FC = () => {
       setIsTranscribingAudio(true);
       showNotice('info', `🎙️ Enviando áudio "${file.name}" para o OpenAI Whisper... Transcrevendo com alta precisão...`);
 
-      const result = await transcribeAudioWithWhisper(file, key);
+      const prompt = buildWhisperPrompt(activeProject, currentSession);
+      const result = await transcribeAudioWithWhisper(file, key, file.name, { prompt });
 
       if (!result.text && (!result.segments || result.segments.length === 0)) {
         showNotice('error', 'Nenhuma fala audível detectada neste arquivo de áudio.');
@@ -657,18 +693,12 @@ export const App: React.FC = () => {
       let parsedSegments: { speaker: string; text: string; timestamp: string }[] = [];
 
       if (result.segments && result.segments.length > 0) {
-        parsedSegments = result.segments.map((seg, idx) => {
-          const timestamp = audioService.formatSecondsToTimestamp(seg.start);
-          const isQuestion = seg.text.includes('?');
-          const speaker = isQuestion
-            ? 'Entrevistador (PM)'
-            : (idx % 2 === 0 ? 'Usuário / Stakeholder' : 'Entrevistador (PM)');
-          return {
-            speaker,
-            text: seg.text,
-            timestamp
-          };
-        });
+        const turns = inferSpeakerTurnsFromWhisper(result.segments);
+        parsedSegments = turns.map(turn => ({
+          speaker: turn.speaker,
+          text: turn.text,
+          timestamp: audioService.formatSecondsToTimestamp(turn.start)
+        }));
       } else {
         const sentences = result.text.split(/(?<=[.?!])\s+/);
         parsedSegments = sentences.filter(s => s.trim().length > 0).map((sentence, idx) => ({
@@ -745,14 +775,62 @@ export const App: React.FC = () => {
     closeMeeting(activeProject.id, currentSession.id);
     refresh();
     setActiveRightTab('minutes');
-    showNotice('success', 'Reunião encerrada: mapa, jornada e ata atualizados. Revise e gere o backlog se fizer sentido.');
+    showNotice('success', 'Reunião encerrada: mapa, jornada, story map e ata atualizados. Revise e gere o backlog se fizer sentido.');
   };
 
   const handleRefreshJourney = () => {
     if (!currentSession) return;
     refreshJourney(activeProject.id, currentSession.id);
     refresh();
-    showNotice('success', 'Jornada atualizada com a sequência que foi contada até agora.');
+    showNotice('success', 'Jornada e Story Map atualizados com a sequência contada até agora.');
+  };
+
+  const handleRefreshStoryMap = () => {
+    if (!currentSession) return;
+    refreshStoryMap(activeProject.id, currentSession.id);
+    refresh();
+    showNotice('success', 'User Story Map atualizado a partir da jornada, dores e JTBDs.');
+  };
+
+  const handleProposeStoryMapToBacklog = (release: StoryMapRelease | 'all') => {
+    if (!currentSession) return;
+    const proposals = proposeStoryMapToBacklog(activeProject, currentSession, release);
+    if (proposals.length === 0) {
+      showNotice('info', 'Nenhuma proposta nova para enviar: as histórias já estão no backlog ou não há cartões nesta faixa.');
+      return;
+    }
+    setPendingReview({
+      projectId: activeProject.id,
+      sessionId: currentSession.id,
+      type: currentSession.type,
+      proposals
+    });
+    setActiveView('backlog');
+    showNotice('success', `${proposals.length} propostas do Story Map enviadas para revisão do backlog!`);
+  };
+
+  const handleGenerateOfflinePrototype = () => {
+    if (!currentSession) return;
+    const proto = buildOfflinePrototype(currentSession, activeProject.name);
+    handleEditSession(s => ({ ...s, prototype: proto }));
+    showNotice('success', 'Wireframe navegável (baixa fidelidade, sem IA) atualizado.');
+  };
+
+  const handleGenerateAIPrototype = async () => {
+    if (!currentSession) return;
+    setIsGeneratingPrototype(true);
+    try {
+      const proto = await generatePrototypeWithAI(currentSession, activeProject);
+      handleEditSession(s => ({ ...s, prototype: proto }));
+      showNotice(
+        'success',
+        proto.source === 'ai'
+          ? 'Protótipo HTML de alta fidelidade gerado com IA!'
+          : 'Sem chave de IA configurada: wireframe de baixa fidelidade atualizado.'
+      );
+    } finally {
+      setIsGeneratingPrototype(false);
+    }
   };
 
   const handleUpdateTaskStatus = (
@@ -1021,6 +1099,8 @@ export const App: React.FC = () => {
                 setIsInformalChatMode(next);
                 showNotice('info', next ? '☕ Modo Bate-Papo ativado: IA pausada para economizar tokens.' : '🎯 Modo Entrevista ativado: IA analisando falas em tempo real.');
               }}
+              autoUpdateInterval={autoUpdateInterval}
+              onChangeAutoUpdateInterval={handleChangeAutoUpdateInterval}
             />
           </div>
 
@@ -1157,9 +1237,30 @@ export const App: React.FC = () => {
                     onRefresh={handleRefreshJourney}
                   />
                 )}
+                {activeRightTab === 'storymap' && (
+                  <StoryMapView
+                    session={currentSession}
+                    onAddCard={data => handleEditSession(s => addStoryMapCard(s, data))}
+                    onUpdateCard={(cardId, patch) => handleEditSession(s => updateStoryMapCard(s, cardId, patch))}
+                    onMoveCard={(cardId, target) => handleEditSession(s => moveStoryMapCard(s, cardId, target))}
+                    onRemoveCard={cardId => handleEditSession(s => removeStoryMapCard(s, cardId))}
+                    onRefresh={handleRefreshStoryMap}
+                    onProposeBacklog={handleProposeStoryMapToBacklog}
+                  />
+                )}
+                {activeRightTab === 'prototype' && (
+                  <PrototypeView
+                    session={currentSession}
+                    projectName={activeProject.name}
+                    isGenerating={isGeneratingPrototype}
+                    onGenerateOffline={handleGenerateOfflinePrototype}
+                    onGenerateAI={handleGenerateAIPrototype}
+                  />
+                )}
                 {activeRightTab === 'minutes' && (
                   <MinutesPanel
                     session={currentSession}
+                    projectName={activeProject.name}
                     onGenerate={handleGenerateMinutes}
                     onGenerateBacklog={handleGenerateBacklogWithAI}
                     isGeneratingBacklog={isGeneratingBacklog}

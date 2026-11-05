@@ -1,4 +1,7 @@
 // Web Audio API & Speech Recognition Service
+import { isAudioBlobValid, isWhisperHallucination } from './whisperFilter';
+
+export const CHUNK_AUDIO_BITS_PER_SECOND = 64_000;
 
 export interface AudioVisualizerData {
   frequencyData: Uint8Array;
@@ -13,6 +16,10 @@ export interface AudioStatus {
 
 export type AudioStatusCallback = (status: AudioStatus) => void;
 
+export interface ChunkedRecorderController {
+  stop: () => void;
+}
+
 class AudioService {
   private mediaStream: MediaStream | null = null;
   private audioContext: AudioContext | null = null;
@@ -26,6 +33,79 @@ class AudioService {
 
   public isSpeechRecognitionSupported(): boolean {
     return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+  }
+
+  /**
+   * Grava o stream em trechos independentes reiniciando o MediaRecorder a cada ciclo.
+   * Nunca usa `recorder.start(timeslice)`, pois fatiar WebM por tempo gera blobs sem cabeçalho EBML.
+   */
+  public startChunkedRecorder(
+    stream: MediaStream,
+    onChunk: (blob: Blob) => void,
+    chunkDurationMs = 10_000
+  ): ChunkedRecorderController {
+    let active = true;
+    let currentRecorder: MediaRecorder | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const pickMimeType = (): string | undefined => {
+      if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+        return undefined;
+      }
+      const candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+      return candidates.find(m => MediaRecorder.isTypeSupported(m));
+    };
+
+    const startCycle = () => {
+      if (!active || typeof MediaRecorder === 'undefined') return;
+      const mimeType = pickMimeType();
+      const parts: Blob[] = [];
+      const recorder = new MediaRecorder(stream, {
+        ...(mimeType ? { mimeType } : {}),
+        audioBitsPerSecond: CHUNK_AUDIO_BITS_PER_SECOND
+      });
+      currentRecorder = recorder;
+
+      recorder.ondataavailable = (event: { data: Blob }) => {
+        if (event.data && event.data.size > 0) {
+          parts.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = parts.length === 1
+          ? parts[0]
+          : new Blob(parts, { type: mimeType || 'audio/webm' });
+        if (isAudioBlobValid(blob)) {
+          onChunk(blob);
+        }
+        if (active) {
+          startCycle();
+        }
+      };
+
+      recorder.start();
+      timer = setTimeout(() => {
+        if (recorder.state === 'recording') {
+          recorder.stop();
+        }
+      }, chunkDurationMs);
+    };
+
+    startCycle();
+
+    return {
+      stop: () => {
+        active = false;
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        if (currentRecorder && currentRecorder.state === 'recording') {
+          currentRecorder.stop();
+        }
+      }
+    };
   }
 
   public async startMicrophoneCapture(
@@ -152,8 +232,9 @@ class AudioService {
       if (finalTranscript.trim()) {
         if (this.interimTimeoutRef) clearTimeout(this.interimTimeoutRef);
         this.lastInterimText = '';
-        if (this.onTranscriptCallback) {
-          this.onTranscriptCallback(finalTranscript.trim(), true);
+        const clean = finalTranscript.trim();
+        if (this.onTranscriptCallback && !isWhisperHallucination(clean)) {
+          this.onTranscriptCallback(clean, true);
         }
       } else if (interimTranscript.trim()) {
         this.lastInterimText = interimTranscript.trim();
@@ -164,7 +245,9 @@ class AudioService {
         if (this.interimTimeoutRef) clearTimeout(this.interimTimeoutRef);
         this.interimTimeoutRef = setTimeout(() => {
           if (this.lastInterimText && this.onTranscriptCallback) {
-            this.onTranscriptCallback(this.lastInterimText, true);
+            if (!isWhisperHallucination(this.lastInterimText)) {
+              this.onTranscriptCallback(this.lastInterimText, true);
+            }
             this.lastInterimText = '';
           }
         }, 1800);

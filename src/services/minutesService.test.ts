@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildMinutes, minutesToMarkdown, withMinutes } from './minutesService';
+import {
+  buildMinutes,
+  minutesToMarkdown,
+  minutesToObsidianMarkdown,
+  minutesToPrintableHtml,
+  withMinutes
+} from './minutesService';
 import type { MeetingSession, Stakeholder, TranscriptSegment } from '../types/discovery';
 
 let counter = 0;
@@ -155,5 +161,47 @@ describe('minutesToMarkdown', () => {
 
     expect(md).not.toContain('## Decisões');
     expect(md).not.toContain('## Ações combinadas');
+  });
+});
+
+describe('E12.6: minutesToObsidianMarkdown e minutesToPrintableHtml', () => {
+  it('minutesToObsidianMarkdown gera frontmatter YAML e wikilinks [[Participante]] e [[Assunto]] com a mesma informação da ata', () => {
+    const s = session(
+      [
+        seg('O fechamento em planilhas demora quatro dias', 'Usuário / Stakeholder', { speakerStakeholderId: 'sh-ana' }),
+        seg('As planilhas quebram toda semana no fechamento'),
+        seg('Eu vou mandar o extrato até sexta', 'Usuário / Stakeholder', { speakerStakeholderId: 'sh-ana' }),
+        seg('Ficou decidido que vamos adotar o novo fluxo')
+      ],
+      { participantIds: ['sh-ana'], objective: 'Entender o fechamento', type: 'discovery' }
+    );
+
+    const obs = minutesToObsidianMarkdown(buildMinutes(s, [ana], NOW), s, 'Plataforma Operacional');
+
+    expect(obs.startsWith('---\n')).toBe(true);
+    expect(obs).toContain('title: "Ata: Discovery do fechamento"');
+    expect(obs).toContain('project: "[[Plataforma Operacional]]"');
+    expect(obs).toContain('tags: [discovery, ata, discovery]');
+    expect(obs).toContain('[[Ana Souza]]');
+    expect(obs).toContain('## Decisões');
+    expect(obs).toContain('## Ações combinadas');
+  });
+
+  it('minutesToPrintableHtml gera HTML completo para impressão/PDF com os mesmos dados da ata', () => {
+    const s = session(
+      [
+        seg('Eu vou mandar o extrato até sexta', 'Usuário / Stakeholder', { speakerStakeholderId: 'sh-ana' }),
+        seg('Ficou decidido que vamos adotar o novo fluxo')
+      ],
+      { participantIds: ['sh-ana'], objective: 'Entender o fechamento' }
+    );
+
+    const html = minutesToPrintableHtml(buildMinutes(s, [ana], NOW), s);
+
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('Ata: Discovery do fechamento');
+    expect(html).toContain('Ana Souza');
+    expect(html).toContain('Ficou decidido que vamos adotar o novo fluxo');
+    expect(html).toContain('Eu vou mandar o extrato até sexta');
   });
 });

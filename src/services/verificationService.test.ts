@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { verifyBacklog, verifyStory } from './verificationService';
+import { evaluateStoryTenPointChecklist, verifyBacklog, verifyStory } from './verificationService';
 import type { AcceptanceCriteria, Epic, TechnicalTask, UserStory } from '../types/discovery';
 
 const criterion = (over: Partial<AcceptanceCriteria> = {}): AcceptanceCriteria => ({
@@ -61,6 +61,39 @@ describe('verifyStory', () => {
     const bad = readyStory({ acceptanceCriteria: [], tasks: [], storyPoints: undefined, soThat: '' });
 
     expect(codes(bad).sort()).toEqual(['missing-statement', 'no-criteria', 'no-estimate', 'no-tasks']);
+  });
+
+  it('E12.7: acusa persona genérica ("usuário") como lacuna de aviso no painel de saúde', () => {
+    const generic = readyStory({ asA: 'usuário' });
+
+    expect(codes(generic)).toContain('vague-persona');
+  });
+});
+
+describe('E12.7: evaluateStoryTenPointChecklist (Checklist de 10 pontos, GO >= 7)', () => {
+  it('aprova (GO = true) uma história que cumpre 7 ou mais dos 10 pontos de qualidade', () => {
+    const result = evaluateStoryTenPointChecklist(
+      readyStory({ evidenceQuote: { speaker: 'Ana', text: 'Perco horas gerando PDF' } })
+    );
+
+    expect(result.total).toBe(10);
+    expect(result.score).toBeGreaterThanOrEqual(7);
+    expect(result.go).toBe(true);
+  });
+
+  it('reprova (GO = false) uma história rasa com menos de 7 pontos e lista os pontos faltantes', () => {
+    const weak = readyStory({
+      asA: 'usuário',
+      soThat: '',
+      acceptanceCriteria: [],
+      tasks: [],
+      storyPoints: undefined
+    });
+
+    const result = evaluateStoryTenPointChecklist(weak);
+    expect(result.score).toBeLessThan(7);
+    expect(result.go).toBe(false);
+    expect(result.items.filter(i => !i.passed).length).toBeGreaterThan(3);
   });
 });
 
