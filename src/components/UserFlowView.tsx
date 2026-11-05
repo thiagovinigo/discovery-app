@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, ArrowRight, Flame, Lightbulb, Pencil, Plus, Quote, RefreshCw, Trash2, Workflow } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Flame, Lightbulb, Pencil, Plus, Quote, RefreshCw, Sparkles, Trash2, Workflow } from 'lucide-react';
 import type { UserFlowStep } from '../types/discovery';
 import type { StepPatch } from '../services/journeyService';
 
@@ -13,6 +13,8 @@ interface UserFlowViewProps {
   onMove: (stepId: string, direction: 'up' | 'down') => void;
   /** Refaz a jornada com o que a conversa tem agora, sem IA. */
   onRefresh?: () => void;
+  /** Extrai ou enriquece a jornada com IA (E11.8). */
+  onRefreshAI?: () => void;
 }
 
 const FRICTION: Record<Friction, { label: string; color: string; height: number }> = {
@@ -133,7 +135,7 @@ const StepCard: React.FC<CardProps> = ({ step, isFirst, isLast, onUpdate, onRemo
   );
 };
 
-export const UserFlowView: React.FC<UserFlowViewProps> = ({ steps, onAdd, onUpdate, onRemove, onMove, onRefresh }) => {
+export const UserFlowView: React.FC<UserFlowViewProps> = ({ steps, onAdd, onUpdate, onRemove, onMove, onRefresh, onRefreshAI }) => {
   const [newTitle, setNewTitle] = useState('');
   const critical = steps.filter(s => s.frictionLevel === 'critical').length;
   const warning = steps.filter(s => s.frictionLevel === 'warning').length;
@@ -156,11 +158,18 @@ export const UserFlowView: React.FC<UserFlowViewProps> = ({ steps, onAdd, onUpda
             </span>
           </div>
         </div>
-        {onRefresh && (
-          <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }} onClick={onRefresh} title="Refaz a jornada com a sequência que o entrevistado contou, sem IA">
-            <RefreshCw size={12} /> Atualizar jornada
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+          {onRefresh && (
+            <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }} onClick={onRefresh} title="Refaz a jornada com a sequência que o entrevistado contou, sem IA">
+              <RefreshCw size={12} /> Atualizar jornada
+            </button>
+          )}
+          {onRefreshAI && (
+            <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }} onClick={onRefreshAI} title="Extrai ou enriquece etapas da jornada usando IA a partir da transcrição">
+              <Sparkles size={12} /> Extrair jornada com IA
+            </button>
+          )}
+        </div>
       </div>
 
       {steps.length === 0 ? (

@@ -96,12 +96,15 @@ describe('UserFlowView', () => {
     expect(props.onAdd).toHaveBeenCalledWith({ title: 'Enviar relatório', actor: 'Entrevistado', frictionLevel: 'smooth' });
   });
 
-  it('"Atualizar jornada" refaz a partir da conversa', () => {
-    const props = setup();
+  it('"Atualizar jornada" refaz a partir da conversa e "Extrair jornada com IA" chama o callback de IA (E11.8)', () => {
+    const onRefreshAI = vi.fn();
+    const props = setup({ onRefreshAI });
 
     fireEvent.click(screen.getByRole('button', { name: /Atualizar jornada/ }));
-
     expect(props.onRefresh).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Extrair jornada com IA/i }));
+    expect(onRefreshAI).toHaveBeenCalledTimes(1);
   });
 
   it('resume onde está o atrito: quantas etapas críticas e com atenção', () => {

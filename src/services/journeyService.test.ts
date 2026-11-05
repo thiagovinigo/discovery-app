@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { addStep, extractJourney, moveStep, removeStep, syncJourney, updateStep } from './journeyService';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { addStep, extractJourney, generateJourneyWithAI, moveStep, removeStep, syncJourney, updateStep } from './journeyService';
+import { storageService } from './storageService';
 import type { MeetingSession, TranscriptSegment, UserFlowStep } from '../types/discovery';
 
 let counter = 0;
@@ -22,6 +23,10 @@ const TALK = [
 
 const manualStep = (over: Partial<UserFlowStep> = {}): UserFlowStep => ({
   id: 'step-1', stepNumber: 1, title: 'Abrir sistema', actor: 'Ana', systemAction: '', frictionLevel: 'smooth', manual: true, ...over
+});
+
+beforeEach(() => {
+  localStorage.clear();
 });
 
 describe('extractJourney', () => {
@@ -100,6 +105,56 @@ describe('syncJourney', () => {
     expect(again.userFlowSteps).toHaveLength(4);
     expect(again.userFlowSteps[0].title).toBe('Baixar extrato OFX');
     expect(again.userFlowSteps[0].manual).toBe(true);
+  });
+});
+
+describe('E11.8: generateJourneyWithAI', () => {
+  it('extrai etapas implícitas da conversa com IA quando há chave e faz fallback para syncJourney sem chave', async () => {
+    const s = session([
+      talk('Recebemos a solicitação do cliente pelo e-mail corporativo'),
+      talk('Conferimos o cadastro na Receita Federal e emitimos a nota fiscal')
+    ]);
+
+    // Sem chave: usa regras locais (sem marcadores = vazio)
+    const offline = await generateJourneyWithAI(s);
+    expect(offline.userFlowSteps).toEqual([]);
+
+    // Com chave: IA extrai as etapas implícitas preservando edições manuais
+    storageService.setOpenAiApiKey('sk-test-journey');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                steps: [
+                  {
+                    title: 'Receber solicitação por e-mail',
+                    actor: 'Analista',
+                    frictionLevel: 'warning',
+                    painPointDetected: 'E-mail sem padrão',
+                    opportunity: 'Formulário estruturado'
+                  },
+                  {
+                    title: 'Conferir CNPJ e emitir nota',
+                    actor: 'Analista',
+                    frictionLevel: 'critical',
+                    painPointDetected: 'Conferência manual demorada'
+                  }
+                ]
+              })
+            }
+          }
+        ]
+      })
+    } as Response);
+
+    const enriched = await generateJourneyWithAI(s);
+    expect(enriched.userFlowSteps).toHaveLength(2);
+    expect(enriched.userFlowSteps[0].title).toBe('Receber solicitação por e-mail');
+    expect(enriched.userFlowSteps[1].frictionLevel).toBe('critical');
+    fetchSpy.mockRestore();
   });
 });
 

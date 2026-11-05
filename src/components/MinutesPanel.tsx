@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
-import { BookOpen, ClipboardCheck, Copy, Download, FileDown, FileText, RefreshCw, Sparkles } from 'lucide-react';
+import { BookOpen, ClipboardCheck, Copy, Download, FileDown, FileText, Pencil, RefreshCw, Sparkles } from 'lucide-react';
 import {
   exportHtmlToPdf,
   minutesToMarkdown,
   minutesToObsidianMarkdown,
   minutesToPrintableHtml
 } from '../services/minutesService';
-import type { MeetingSession } from '../types/discovery';
+import type { MeetingMinutes, MeetingSession } from '../types/discovery';
 
 interface MinutesPanelProps {
   session: MeetingSession;
   projectName?: string;
-  /** Gera (ou gera de novo) a ata a partir da conversa. */
+  /** Gera (ou gera de novo) a ata a partir da conversa (regras locais). */
   onGenerate: () => void;
+  /** Enriquece a ata com IA (decisões, responsáveis e prazos, E11.8). */
+  onGenerateAI?: () => void;
+  /** Salva edições manuais feitas na ata (E11.8). */
+  onUpdateMinutes?: (patch: Partial<MeetingMinutes>) => void;
   /** Leva o que a reunião trouxe para o backlog, pelo painel de revisão. */
   onGenerateBacklog?: () => void;
   isGeneratingBacklog?: boolean;
@@ -22,6 +26,16 @@ const COPIED_MS = 2500;
 
 const heading: React.CSSProperties = { margin: '10px 0 4px', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' };
 const list: React.CSSProperties = { margin: 0, paddingLeft: '18px', fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.5 };
+const inputStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '6px 8px',
+  borderRadius: '6px',
+  border: '1px solid var(--border-subtle)',
+  background: 'rgba(15, 23, 42, 0.85)',
+  color: 'var(--text-main)',
+  fontSize: '0.76rem',
+  boxSizing: 'border-box'
+};
 
 const Section: React.FC<{ title: string; items: React.ReactNode[] }> = ({ title, items }) =>
   items.length === 0 ? null : (
@@ -35,11 +49,64 @@ export const MinutesPanel: React.FC<MinutesPanelProps> = ({
   session,
   projectName,
   onGenerate,
+  onGenerateAI,
+  onUpdateMinutes,
   onGenerateBacklog,
   isGeneratingBacklog = false
 }) => {
   const [copied, setCopied] = useState(false);
+  const [editing, setEditing] = useState(false);
   const minutes = session.minutes;
+
+  const [editSummary, setEditSummary] = useState('');
+  const [editDecisionsText, setEditDecisionsText] = useState('');
+  const [editActionsText, setEditActionsText] = useState('');
+  const [editQuestionsText, setEditQuestionsText] = useState('');
+
+  const startEditing = () => {
+    if (!minutes) return;
+    setEditSummary(minutes.summary);
+    setEditDecisionsText(minutes.decisions.map(d => `${d.text} | ${d.speaker} | ${d.timestamp}`).join('\n'));
+    setEditActionsText(minutes.actionItems.map(a => `${a.item} | ${a.owner} | ${a.deadline}`).join('\n'));
+    setEditQuestionsText(minutes.openQuestions.join('\n'));
+    setEditing(true);
+  };
+
+  const saveEdits = () => {
+    if (!onUpdateMinutes) return;
+    const decisions = editDecisionsText
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean)
+      .map(line => {
+        const [text = '', speaker = 'Entrevistado', timestamp = '00:00'] = line.split('|').map(p => p.trim());
+        return { text, speaker, timestamp };
+      })
+      .filter(d => d.text);
+
+    const actionItems = editActionsText
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean)
+      .map(line => {
+        const [item = '', owner = 'A definir', deadline = 'A definir'] = line.split('|').map(p => p.trim());
+        return { item, owner, deadline };
+      })
+      .filter(a => a.item);
+
+    const openQuestions = editQuestionsText
+      .split('\n')
+      .map(l => l.trim())
+      .filter(Boolean);
+
+    onUpdateMinutes({
+      summary: editSummary.trim(),
+      decisions,
+      actionItems,
+      openQuestions
+    });
+    setEditing(false);
+  };
 
   const slug = session.title.replace(/[^\p{L}\p{N}]+/gu, '_').toLowerCase() || 'reuniao';
   const markdown = () => (minutes ? minutesToMarkdown(minutes, session) : '');
@@ -86,6 +153,16 @@ export const MinutesPanel: React.FC<MinutesPanelProps> = ({
             <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }} onClick={onGenerate}>
               <RefreshCw size={12} /> Atualizar ata
             </button>
+            {onGenerateAI && (
+              <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }} onClick={onGenerateAI}>
+                <Sparkles size={12} /> Enriquecer ata com IA
+              </button>
+            )}
+            {onUpdateMinutes && !editing && (
+              <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }} onClick={startEditing}>
+                <Pencil size={12} /> Editar ata
+              </button>
+            )}
             <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px' }} onClick={copy}>
               {copied ? <ClipboardCheck size={12} /> : <Copy size={12} />} {copied ? 'Copiado!' : 'Copiar Markdown'}
             </button>
@@ -117,9 +194,66 @@ export const MinutesPanel: React.FC<MinutesPanelProps> = ({
           <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
             Esta reunião ainda não tem ata. Ela reúne participantes, assuntos, decisões, ações com responsável e prazo, perguntas em aberto, dores e jobs, tudo a partir do que foi dito.
           </p>
-          <button className="btn btn-primary" style={{ gap: '6px' }} onClick={onGenerate}>
-            <Sparkles size={14} /> Gerar ata
-          </button>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button className="btn btn-primary" style={{ gap: '6px' }} onClick={onGenerate}>
+              <Sparkles size={14} /> Gerar ata
+            </button>
+            {onGenerateAI && (
+              <button className="btn btn-secondary" style={{ gap: '6px' }} onClick={onGenerateAI}>
+                <Sparkles size={14} /> Gerar ata com IA
+              </button>
+            )}
+          </div>
+        </div>
+      ) : editing ? (
+        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
+            Resumo da ata
+            <input
+              aria-label="Resumo da ata"
+              style={inputStyle}
+              value={editSummary}
+              onChange={e => setEditSummary(e.target.value)}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
+            Decisões (uma por linha: texto | autor | minuto)
+            <textarea
+              aria-label="Decisões da ata"
+              rows={3}
+              style={inputStyle}
+              value={editDecisionsText}
+              onChange={e => setEditDecisionsText(e.target.value)}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
+            Ações combinadas (uma por linha: ação | responsável | prazo)
+            <textarea
+              aria-label="Ações combinadas da ata"
+              rows={3}
+              style={inputStyle}
+              value={editActionsText}
+              onChange={e => setEditActionsText(e.target.value)}
+            />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem', fontWeight: 700 }}>
+            Perguntas em aberto (uma por linha)
+            <textarea
+              aria-label="Perguntas em aberto da ata"
+              rows={3}
+              style={inputStyle}
+              value={editQuestionsText}
+              onChange={e => setEditQuestionsText(e.target.value)}
+            />
+          </label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" className="btn btn-primary" style={{ fontSize: '0.74rem', padding: '5px 12px' }} onClick={saveEdits}>
+              Salvar edições da ata
+            </button>
+            <button type="button" className="btn btn-ghost" style={{ fontSize: '0.74rem', padding: '5px 12px' }} onClick={() => setEditing(false)}>
+              Cancelar
+            </button>
+          </div>
         </div>
       ) : (
         <>

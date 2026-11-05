@@ -1,4 +1,6 @@
+import { callAI, parseJsonLoose } from './aiClient';
 import { plain } from './knowledgeService';
+import { storageService } from './storageService';
 import { extractTopics } from './topicService';
 import type { MeetingMinutes, MeetingSession, Stakeholder, TranscriptSegment } from '../types/discovery';
 
@@ -111,6 +113,104 @@ export function buildMinutes(session: MeetingSession, stakeholders: Stakeholder[
 /** Guarda a ata na sessão (devolve uma sessão nova). */
 export function withMinutes(session: MeetingSession, stakeholders: Stakeholder[] = [], now: Date = new Date()): MeetingSession {
   return { ...session, minutes: buildMinutes(session, stakeholders, now) };
+}
+
+/** Atualiza campos editados manualmente pelo usuário na ata da sessão (E11.8). */
+export function updateMinutes(session: MeetingSession, patch: Partial<MeetingMinutes>): MeetingSession {
+  const base = session.minutes ?? buildMinutes(session);
+  return {
+    ...session,
+    minutes: {
+      ...base,
+      ...patch
+    }
+  };
+}
+
+/**
+ * Enriquece a ata usando IA para detectar decisões implícitas, responsáveis e prazos na conversa (E11.8).
+ * Sem chave de IA ou em caso de falha, devolve `buildMinutes` local sem perder dados.
+ */
+export async function generateMinutesWithAI(
+  session: MeetingSession,
+  stakeholders: Stakeholder[] = [],
+  now: Date = new Date()
+): Promise<MeetingMinutes> {
+  const base = buildMinutes(session, stakeholders, now);
+  const apiKey = storageService.getApiKey();
+  const provider = storageService.getAiProvider();
+  const model = storageService.getModel();
+
+  if (!apiKey || session.rawTranscript.length === 0) return base;
+
+  const speakerOf = (segment: TranscriptSegment): string =>
+    stakeholders.find(s => s.id === segment.speakerStakeholderId)?.name ?? GENERIC_SPEAKERS[segment.speaker];
+
+  const transcriptText = session.rawTranscript
+    .slice(-40)
+    .map(s => `[${s.timestamp}] ${speakerOf(s)}: ${s.text}`)
+    .join('\n');
+
+  try {
+    const raw = await callAI({
+      provider,
+      apiKey,
+      model,
+      json: true,
+      temperature: 0.2,
+      systemPrompt:
+        'Você é um especialista em atas executivas de produto. Extraia apenas o que realmente foi dito na transcrição, ' +
+        'sem inventar dados. Quando responsável ou prazo não forem citados, use "A definir". ' +
+        'Retorne JSON estrito com: { "summary"?: string, "decisions": [{ "text": string, "speaker": string, "timestamp": string }], ' +
+        '"actionItems": [{ "item": string, "owner": string, "deadline": string }], "openQuestions": [string] }.',
+      userPrompt: `Reunião: ${session.title}\nTranscrição:\n${transcriptText}`
+    });
+
+    const parsed = parseJsonLoose(raw) as Partial<MeetingMinutes>;
+    const seenDecisions = new Set(base.decisions.map(d => norm(d.text)));
+    const aiDecisions = (Array.isArray(parsed.decisions) ? parsed.decisions : [])
+      .filter(d => d && typeof d.text === 'string' && d.text.trim() && !seenDecisions.has(norm(d.text)))
+      .map(d => ({
+        text: d.text.trim(),
+        speaker: (d.speaker || 'Entrevistado').trim(),
+        timestamp: (d.timestamp || '00:00').trim()
+      }));
+
+    const seenActions = new Set(base.actionItems.map(a => norm(a.item)));
+    const aiActions = (Array.isArray(parsed.actionItems) ? parsed.actionItems : [])
+      .filter(a => a && typeof a.item === 'string' && a.item.trim() && !seenActions.has(norm(a.item)))
+      .map(a => ({
+        item: a.item.trim(),
+        owner: (a.owner || UNDEFINED_VALUE).trim(),
+        deadline: (a.deadline || UNDEFINED_VALUE).trim()
+      }));
+
+    const aiQuestions = (Array.isArray(parsed.openQuestions) ? parsed.openQuestions : []).filter(
+      (q): q is string => typeof q === 'string' && !!q.trim()
+    );
+
+    const decisions = [...base.decisions, ...aiDecisions];
+    const actionItems = [...base.actionItems, ...aiActions];
+    const openQuestions = unique([...base.openQuestions, ...aiQuestions]);
+
+    return {
+      ...base,
+      summary:
+        typeof parsed.summary === 'string' && parsed.summary.trim()
+          ? parsed.summary.trim()
+          : [
+              plural(session.rawTranscript.filter(s => s.text.trim()).length, 'fala', 'falas'),
+              plural(base.topics.length, 'assunto', 'assuntos'),
+              plural(decisions.length, 'decisão', 'decisões'),
+              plural(actionItems.length, 'ação combinada', 'ações combinadas')
+            ].join(', '),
+      decisions,
+      actionItems,
+      openQuestions
+    };
+  } catch {
+    return base;
+  }
 }
 
 const cell = (text: string): string => text.replace(/\|/g, '\\|');

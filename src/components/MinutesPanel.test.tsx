@@ -84,4 +84,30 @@ describe('MinutesPanel', () => {
     expect(screen.getByRole('button', { name: /Obsidian \(\.md\)/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Baixar PDF/i })).toBeTruthy();
   });
+
+  it('E11.8: permite editar resumo, decisões, ações combinadas e perguntas da ata e acionar enriquecimento com IA', () => {
+    const onUpdateMinutes = vi.fn();
+    const onGenerateAI = vi.fn();
+    render(
+      <MinutesPanel
+        session={session(MINUTES)}
+        onGenerate={vi.fn()}
+        onUpdateMinutes={onUpdateMinutes}
+        onGenerateAI={onGenerateAI}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /Enriquecer ata com IA/i }));
+    expect(onGenerateAI).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /Editar ata/i }));
+    fireEvent.change(screen.getByLabelText('Resumo da ata'), { target: { value: 'Resumo editado manualmente' } });
+    fireEvent.click(screen.getByRole('button', { name: /Salvar edições da ata/i }));
+
+    expect(onUpdateMinutes).toHaveBeenCalledWith(
+      expect.objectContaining({
+        summary: 'Resumo editado manualmente'
+      })
+    );
+  });
 });

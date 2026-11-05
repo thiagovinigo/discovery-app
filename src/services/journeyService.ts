@@ -1,6 +1,8 @@
+import { callAI, parseJsonLoose } from './aiClient';
 import { newId } from './ids';
 import { plain } from './knowledgeService';
 import { shorten } from './mindMapService';
+import { storageService } from './storageService';
 import type { MeetingSession, Stakeholder, TranscriptSegment, UserFlowStep } from '../types/discovery';
 
 const DERIVED_PREFIX = 'jf-';
@@ -87,6 +89,79 @@ export function syncJourney(session: MeetingSession, stakeholders: Stakeholder[]
     titles.add(norm(step.title));
   }
   return { ...session, userFlowSteps: renumber(kept) };
+}
+
+/**
+ * Extrai ou enriquece a jornada do usuário com IA a partir da conversa (E11.8),
+ * preservando etapas manuais do usuário e caindo para `syncJourney` sem chave ou em caso de falha.
+ */
+export async function generateJourneyWithAI(
+  session: MeetingSession,
+  stakeholders: Stakeholder[] = []
+): Promise<MeetingSession> {
+  const synced = syncJourney(session, stakeholders);
+  const apiKey = storageService.getApiKey();
+  const provider = storageService.getAiProvider();
+  const model = storageService.getModel();
+
+  if (!apiKey || session.rawTranscript.length === 0) return synced;
+
+  const transcriptText = session.rawTranscript
+    .filter(s => s.speaker !== INTERVIEWER && s.text.trim())
+    .slice(-30)
+    .map(s => {
+      const who = stakeholders.find(st => st.id === s.speakerStakeholderId)?.name ?? 'Entrevistado';
+      return `${who}: ${s.text}`;
+    })
+    .join('\n');
+
+  if (!transcriptText.trim()) return synced;
+
+  try {
+    const raw = await callAI({
+      provider,
+      apiKey,
+      model,
+      json: true,
+      temperature: 0.2,
+      systemPrompt:
+        'Você é um especialista em mapeamento de jornada de usuário (User Journey). Extraia somente as etapas reais ' +
+        'relatadas pelo entrevistado, na ordem em que acontecem. Não invente etapas que não foram descritas. ' +
+        'Retorne JSON estrito: { "steps": [{ "title": string, "actor": string, "frictionLevel": "smooth"|"warning"|"critical", ' +
+        '"painPointDetected"?: string, "opportunity"?: string, "quote"?: string }] }.',
+      userPrompt: `Transcrição do entrevistado:\n${transcriptText}`
+    });
+
+    const parsed = parseJsonLoose(raw) as { steps?: Partial<UserFlowStep>[] };
+    const aiSteps = Array.isArray(parsed.steps) ? parsed.steps : [];
+    const existingTitles = new Set(synced.userFlowSteps.map(s => norm(s.title)));
+    const merged = [...synced.userFlowSteps];
+
+    for (const candidate of aiSteps) {
+      const title = typeof candidate?.title === 'string' ? shorten(candidate.title.trim()) : '';
+      if (!title || existingTitles.has(norm(title))) continue;
+      existingTitles.add(norm(title));
+      const friction: Friction =
+        candidate.frictionLevel === 'critical' || candidate.frictionLevel === 'warning'
+          ? candidate.frictionLevel
+          : 'smooth';
+      merged.push({
+        id: newId('ai-step'),
+        stepNumber: merged.length + 1,
+        title,
+        actor: (candidate.actor || 'Entrevistado').trim(),
+        systemAction: '',
+        frictionLevel: friction,
+        ...(candidate.painPointDetected?.trim() ? { painPointDetected: candidate.painPointDetected.trim() } : {}),
+        ...(candidate.opportunity?.trim() ? { opportunity: candidate.opportunity.trim() } : {}),
+        ...(candidate.quote?.trim() ? { quote: candidate.quote.trim() } : {})
+      });
+    }
+
+    return { ...synced, userFlowSteps: renumber(merged) };
+  } catch {
+    return synced;
+  }
 }
 
 export type StepPatch = Partial<Omit<UserFlowStep, 'id' | 'stepNumber'>>;

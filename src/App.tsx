@@ -22,15 +22,8 @@ import {
   refreshStoryMap,
   setLiveAutoInterval
 } from './services/sessionService';
-import { addStep, moveStep, removeStep, updateStep } from './services/journeyService';
-import { addChildNode, deleteNode, renameNode } from './services/mindMapService';
-import {
-  addStoryMapCard,
-  moveStoryMapCard,
-  proposeStoryMapToBacklog,
-  removeStoryMapCard,
-  updateStoryMapCard
-} from './services/storyMapService';
+import { generateJourneyWithAI } from './services/journeyService';
+import { proposeStoryMapToBacklog, syncStoryMap } from './services/storyMapService';
 import { buildOfflinePrototype, generatePrototypeWithAI } from './services/prototypeService';
 import { buildWhisperPrompt } from './services/whisperFilter';
 import { useProjects } from './state/useProjects';
@@ -52,12 +45,7 @@ import { proposalsForMeetingType } from './services/backlogProposals';
 import { clearPendingReview, loadPendingReview, savePendingReview } from './state/pendingReviewStore';
 import type { PendingReview } from './state/pendingReviewStore';
 import { AgendaView } from './components/AgendaView';
-import { SessionAgendaCard } from './components/SessionAgendaCard';
-import { SessionClosingPanel } from './components/SessionClosingPanel';
-import { closingOf } from './services/meetingCopilotService';
-import { SessionPeopleBar } from './components/SessionPeopleBar';
 import { setCurrentSpeaker, setSessionParticipants } from './services/stakeholderService';
-import { AssistantPanel } from './components/AssistantPanel';
 import { MEETING_TYPE_LABELS, runAssistant, setAssistantEnabled, setSessionType } from './services/assistantService';
 import type { MeetingType } from './types/discovery';
 import { audioService, type AudioStatus } from './services/audioService';
@@ -65,13 +53,6 @@ import { inferSpeakerTurnsFromWhisper, transcribeAudioWithWhisper } from './serv
 
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
-import { AudioCaptureBar } from './components/AudioCaptureBar';
-import { LiveQuestionPrompter } from './components/LiveQuestionPrompter';
-import { LiveTranscriptionView } from './components/LiveTranscriptionView';
-import { MindMapCanvas } from './components/MindMapCanvas';
-import { UserFlowView } from './components/UserFlowView';
-import { StoryMapView } from './components/StoryMapView';
-import { PrototypeView } from './components/PrototypeView';
 import { DiscoveryToDoneView } from './components/DiscoveryToDoneView';
 import { ProjectDocumentationView } from './components/ProjectDocumentationView';
 import { AgileKnowledgeHubView } from './components/AgileKnowledgeHubView';
@@ -83,42 +64,12 @@ import { ProjectsHomeView } from './components/ProjectsHomeView';
 import { MeetingsView } from './components/MeetingsView';
 import { RefineView } from './components/RefineView';
 import { POSpaceView } from './components/POSpaceView';
-import { AgentPanel } from './components/AgentPanel';
-import { LiveSessionsManager } from './components/LiveSessionsManager';
 import { ProductAuditView } from './components/ProductAuditView';
-import { TopicsPanel } from './components/TopicsPanel';
-import { MinutesPanel } from './components/MinutesPanel';
+import { LiveRoomView } from './components/LiveRoomView';
+import type { RightTab } from './components/LiveRoomView';
 import type { AppView } from './components/Sidebar';
 import { applySuggestions, assignSpeaker, suggestSpeakers } from './services/speakerService';
-import { withMinutes } from './services/minutesService';
-
-import {
-  Radio,
-  GitBranch,
-  Workflow,
-  Plus,
-  Maximize2,
-  Minimize2,
-  Keyboard,
-  Flag,
-  Layers,
-  FileText,
-  LayoutGrid,
-  Monitor
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-
-type RightTab = 'topics' | 'mindmap' | 'userflow' | 'storymap' | 'prototype' | 'minutes';
-
-/** Painéis ao lado da conversa: o que ela vai produzindo, na ordem em que o PO costuma usar. */
-const RIGHT_TABS: { id: RightTab; label: string; Icon: LucideIcon; count: (s: MeetingSession) => string }[] = [
-  { id: 'topics', label: 'Tópicos & Perguntas', Icon: Layers, count: s => `${s.liveQuestions.filter(q => !q.asked).length} a fazer` },
-  { id: 'mindmap', label: 'Mapa mental', Icon: GitBranch, count: s => `${s.mindMapNodes.length} nós` },
-  { id: 'userflow', label: 'Jornada', Icon: Workflow, count: s => `${s.userFlowSteps.length} etapas` },
-  { id: 'storymap', label: 'Story Map', Icon: LayoutGrid, count: s => `${(s.storyMapCards ?? []).length} histórias` },
-  { id: 'prototype', label: 'Protótipo', Icon: Monitor, count: s => `${s.userFlowSteps.length} telas` },
-  { id: 'minutes', label: 'Ata', Icon: FileText, count: s => (s.minutes ? 'pronta' : 'a gerar') }
-];
+import { generateMinutesWithAI, withMinutes } from './services/minutesService';
 
 export const App: React.FC = () => {
   const [activeView, setActiveView] = useHashView();
@@ -150,8 +101,6 @@ export const App: React.FC = () => {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isInformalChatMode, setIsInformalChatMode] = useState(false);
   const [autoUpdateInterval, setAutoUpdateIntervalState] = useState<number>(() => getLiveAutoInterval());
-  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
-  const liveFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const recordingTimerRef = useRef<any>(null);
   const noticeTimerRef = useRef<any>(null);
@@ -458,9 +407,6 @@ export const App: React.FC = () => {
     activeProject.sessions.find(s => s.id === activeProject.activeSessionId) ||
     activeProject.sessions[0];
 
-  // Pistas no texto sobre quem falou ("aqui é a Ana"); o usuário aceita uma a uma ou todas
-  const speakerSuggestions = currentSession ? suggestSpeakers(currentSession, activeProject.stakeholders ?? []) : [];
-
   // Handler para Relatar Bug de Produção a partir de fala do cliente
   const handleReportBug = (seg: TranscriptSegment) => {
     if (!activeProject || !currentSession) return;
@@ -718,29 +664,6 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleFileUploadInApp = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (audioService.isAudioFile(file)) {
-      await handleAudioWhisperUpload(file);
-      e.target.value = '';
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        const parsed = audioService.parseTranscriptFile(content);
-        handleImportTranscriptFile(parsed);
-        showNotice('success', `${parsed.length} falas importadas com sucesso!`);
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
   const handleEditSession = (edit: (session: MeetingSession) => MeetingSession) => {
     if (!currentSession) return;
     editMindMap(activeProject.id, currentSession.id, edit);
@@ -768,6 +691,13 @@ export const App: React.FC = () => {
     showNotice('success', 'Ata gerada a partir da conversa.');
   };
 
+  const handleGenerateMinutesAI = async () => {
+    if (!currentSession) return;
+    const enriched = await generateMinutesWithAI(currentSession, activeProject.stakeholders ?? []);
+    handleEditSession(s => ({ ...s, minutes: enriched }));
+    showNotice('success', 'Ata enriquecida com decisões, ações e prazos!');
+  };
+
   // Encerra: para a gravação, refaz mapa e jornada com tudo o que foi dito e gera a ata
   const handleEndMeeting = () => {
     if (!currentSession) return;
@@ -783,6 +713,13 @@ export const App: React.FC = () => {
     refreshJourney(activeProject.id, currentSession.id);
     refresh();
     showNotice('success', 'Jornada e Story Map atualizados com a sequência contada até agora.');
+  };
+
+  const handleRefreshJourneyAI = async () => {
+    if (!currentSession) return;
+    const withAiJourney = await generateJourneyWithAI(currentSession, activeProject.stakeholders ?? []);
+    handleEditSession(() => syncStoryMap(withAiJourney));
+    showNotice('success', 'Jornada e Story Map enriquecidos com IA!');
   };
 
   const handleRefreshStoryMap = () => {
@@ -1010,269 +947,71 @@ export const App: React.FC = () => {
           />
         )}
 
-        {/* VIEW 1: LIVE ROOM — projeto ainda sem nenhuma sessão */}
-        {activeView === 'live_room' && !currentSession && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', padding: '64px 16px', textAlign: 'center' }}>
-            <Radio size={32} />
-            <h2 style={{ margin: 0 }}>Nenhuma sessão de discovery neste projeto</h2>
-            <p style={{ margin: 0, maxWidth: '460px', color: 'var(--text-muted)' }}>
-              Crie a primeira sessão para gravar, digitar notas ou importar uma transcrição.
-            </p>
-            <button className="btn btn-primary" onClick={handleStartFirstSession}>
-              <Plus size={14} /> Iniciar primeira sessão
-            </button>
-          </div>
-        )}
-
-        {/* VIEW 1: LIVE ROOM */}
-        {activeView === 'live_room' && currentSession && (
-          <>
-          <LiveSessionsManager
+        {/* VIEW 1: LIVE ROOM (E11.9: extraído para LiveRoomView) */}
+        {activeView === 'live_room' && (
+          <LiveRoomView
             project={activeProject}
-            activeSession={currentSession}
+            currentSession={currentSession}
+            activeRightTab={activeRightTab}
+            onChangeRightTab={setActiveRightTab}
+            isRecording={isRecording}
+            isFocusMode={isFocusMode}
+            isInformalChatMode={isInformalChatMode}
+            autoUpdateInterval={autoUpdateInterval}
+            isTranscribingAudio={isTranscribingAudio}
+            isAssistantBusy={isAssistantBusy}
+            isGeneratingBacklog={isGeneratingBacklog}
+            isAnalyzingLive={isAnalyzingLive}
+            isGeneratingPrototype={isGeneratingPrototype}
+            onStartFirstSession={handleStartFirstSession}
             onSelectSession={handleSelectSession}
             onCreateSession={handleCreateSession}
             onRenameSession={handleRenameSession}
+            onToggleFocusMode={() => setIsFocusMode(prev => !prev)}
+            onEndMeeting={handleEndMeeting}
+            onStartRecording={handleStartRecording}
+            onStopRecording={handleStopRecording}
+            onIncomingTranscript={handleIncomingTranscript}
+            onImportTranscriptFile={handleImportTranscriptFile}
+            onUploadAudioFile={handleAudioWhisperUpload}
+            onToggleInformalMode={() => {
+              const next = !isInformalChatMode;
+              setIsInformalChatMode(next);
+              showNotice('info', next ? '☕ Modo Bate-Papo ativado: IA pausada para economizar tokens.' : '🎯 Modo Entrevista ativado: IA analisando falas em tempo real.');
+            }}
+            onChangeAutoUpdateInterval={handleChangeAutoUpdateInterval}
+            onChangeParticipants={(ids) => {
+              if (!currentSession) return;
+              setSessionParticipants(activeProject.id, currentSession.id, ids);
+              refresh();
+            }}
+            onChangeSpeaker={(id) => {
+              if (!currentSession) return;
+              setCurrentSpeaker(activeProject.id, currentSession.id, id);
+              refresh();
+            }}
+            onChangeSessionType={(type) => currentSession && handleChangeSessionType(currentSession.id, type)}
+            onToggleAssistant={(enabled) => currentSession && handleToggleAssistant(currentSession.id, enabled)}
+            onRunAssistantNow={() => currentSession && handleRunAssistantNow(currentSession.id)}
+            onSaveClosing={handleSaveClosing}
+            onGenerateBacklogWithAI={handleGenerateBacklogWithAI}
+            onAssignSpeaker={handleAssignSpeaker}
+            onApplySpeakerSuggestions={handleApplySpeakerSuggestions}
+            onReportBug={handleReportBug}
+            onAnalyzeSessionWithAI={handleAnalyzeSessionWithAI}
+            onClearCurrentSessionTranscript={handleClearCurrentSessionTranscript}
+            onMarkQuestionAsked={handleMarkQuestionAsked}
+            onEditSession={handleEditSession}
+            onRefreshMap={handleRefreshMap}
+            onRefreshJourney={handleRefreshJourney}
+            onRefreshJourneyAI={handleRefreshJourneyAI}
+            onRefreshStoryMap={handleRefreshStoryMap}
+            onProposeStoryMapToBacklog={handleProposeStoryMapToBacklog}
+            onGenerateOfflinePrototype={handleGenerateOfflinePrototype}
+            onGenerateAIPrototype={handleGenerateAIPrototype}
+            onGenerateMinutes={handleGenerateMinutes}
+            onGenerateMinutesAI={handleGenerateMinutesAI}
           />
-
-          {/* Barra de controle fixa: gravar, encerrar e modo foco ficam sempre à mão */}
-          <div style={{ position: 'sticky', top: 0, zIndex: 20, margin: '0 -20px 10px', padding: '6px 20px 8px', background: 'var(--bg-main)', borderBottom: '1px solid var(--border-subtle)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button
-                  onClick={() => setIsFocusMode(prev => !prev)}
-                  className="btn btn-secondary"
-                  style={{
-                    padding: '4px 10px',
-                    fontSize: '0.72rem',
-                    fontWeight: 700,
-                    gap: '6px',
-                    background: isFocusMode ? 'rgba(99, 102, 241, 0.25)' : 'rgba(255, 255, 255, 0.05)',
-                    border: isFocusMode ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
-                    color: isFocusMode ? '#c4b5fd' : 'var(--text-main)'
-                  }}
-                  title="Oculta a barra lateral para dar 100% de tela à entrevista (Atalho: Alt + F)"
-                >
-                  {isFocusMode ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                  {isFocusMode ? 'Sair do Modo Foco' : 'Modo Foco'}
-                </button>
-                <button
-                  onClick={() => setShowShortcutsHelp(prev => !prev)}
-                  className="btn btn-ghost"
-                  style={{ padding: '4px 8px', fontSize: '0.72rem', gap: '4px', color: 'var(--text-dim)' }}
-                  title="Ver atalhos de teclado da reunião"
-                >
-                  <Keyboard size={13} /> Atalhos
-                </button>
-              </div>
-
-              <button
-                className="btn btn-primary"
-                style={{ padding: '5px 12px', fontSize: '0.76rem', gap: '6px' }}
-                disabled={currentSession.rawTranscript.length === 0}
-                onClick={handleEndMeeting}
-                title="Para a gravação, atualiza mapa e jornada e gera a ata com decisões, ações e perguntas em aberto"
-              >
-                <Flag size={13} /> Encerrar reunião
-              </button>
-            </div>
-
-            {showShortcutsHelp && (
-              <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '6px' }}>
-                <span><kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>Espaço</kbd> Gravar/Pausar</span>
-                <span><kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>Ctrl + M</kbd> Marcar Pergunta</span>
-                <span><kbd style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px' }}>Alt + F</kbd> Modo Foco</span>
-              </div>
-            )}
-
-            <AudioCaptureBar
-              isRecording={isRecording}
-              onStartRecording={handleStartRecording}
-              onStopRecording={handleStopRecording}
-              onNewTranscriptSegment={handleIncomingTranscript}
-              onImportTranscriptFile={handleImportTranscriptFile}
-              onUploadAudioFile={handleAudioWhisperUpload}
-              isTranscribingAudio={isTranscribingAudio}
-              isInformalMode={isInformalChatMode}
-              onToggleInformalMode={() => {
-                const next = !isInformalChatMode;
-                setIsInformalChatMode(next);
-                showNotice('info', next ? '☕ Modo Bate-Papo ativado: IA pausada para economizar tokens.' : '🎯 Modo Entrevista ativado: IA analisando falas em tempo real.');
-              }}
-              autoUpdateInterval={autoUpdateInterval}
-              onChangeAutoUpdateInterval={handleChangeAutoUpdateInterval}
-            />
-          </div>
-
-          {/* Preparação da sala: aberta antes da conversa, recolhe sozinha quando a primeira fala chega */}
-          <details key={`${currentSession.id}:${currentSession.rawTranscript.length > 0}`} open={currentSession.rawTranscript.length === 0} style={{ marginBottom: '10px' }}>
-            <summary style={{ cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-muted)', padding: '4px 0' }}>
-              Preparação da sala: pessoas, pauta, assistente e fechamento
-            </summary>
-            <SessionPeopleBar
-              stakeholders={activeProject.stakeholders ?? []}
-              participantIds={currentSession.participantIds ?? []}
-              currentSpeakerId={currentSession.currentSpeakerId}
-              onChangeParticipants={(ids) => {
-                setSessionParticipants(activeProject.id, currentSession.id, ids);
-                refresh();
-              }}
-              onChangeSpeaker={(id) => {
-                setCurrentSpeaker(activeProject.id, currentSession.id, id);
-                refresh();
-              }}
-            />
-
-            <SessionAgendaCard session={currentSession} />
-
-            <AssistantPanel
-              session={currentSession}
-              busy={isAssistantBusy}
-              onChangeType={(type) => handleChangeSessionType(currentSession.id, type)}
-              onToggle={(enabled) => handleToggleAssistant(currentSession.id, enabled)}
-              onRunNow={() => handleRunAssistantNow(currentSession.id)}
-            />
-
-            <SessionClosingPanel
-              key={currentSession.id}
-              savedNote={closingOf(activeProject.notes ?? [], currentSession.id)}
-              onSave={handleSaveClosing}
-              onReviewBacklog={handleGenerateBacklogWithAI}
-              isGenerating={isGeneratingBacklog}
-            />
-          </details>
-
-          {/* Input oculto para importação rápida via Empty State */}
-          <input
-            ref={liveFileInputRef}
-            type="file"
-            accept=".mp3,.wav,.m4a,.ogg,.webm,.aac,.flac,.txt,.vtt,.srt,.json"
-            onChange={handleFileUploadInApp}
-            style={{ display: 'none' }}
-          />
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.25fr)', gap: '16px', height: 'calc(100vh - 210px)', minHeight: '560px' }}>
-            {/* Esquerda: a conversa, com quem falou em cada fala */}
-            <div style={{ height: '100%', minHeight: 0 }}>
-              <LiveTranscriptionView
-                segments={currentSession.rawTranscript}
-                stakeholders={activeProject.stakeholders ?? []}
-                onAssignSpeaker={handleAssignSpeaker}
-                speakerSuggestions={speakerSuggestions}
-                onApplySuggestions={handleApplySpeakerSuggestions}
-                onManualNoteSubmit={handleIncomingTranscript}
-                onActionStartMic={() => handleStartRecording('mic')}
-                onActionImportFile={() => liveFileInputRef.current?.click()}
-                onReportBug={handleReportBug}
-                onTriggerAnalysis={handleAnalyzeSessionWithAI}
-                onClearTranscript={handleClearCurrentSessionTranscript}
-                isAnalyzing={isAnalyzingLive}
-              />
-            </div>
-
-            {/* Direita: o que a conversa vai produzindo */}
-            <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-              <div role="tablist" aria-label="Painéis da reunião" style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                {RIGHT_TABS.map(({ id, label, Icon, count }) => (
-                  <button
-                    key={id}
-                    role="tab"
-                    aria-selected={activeRightTab === id}
-                    onClick={() => setActiveRightTab(id)}
-                    style={{
-                      padding: '5px 12px',
-                      borderRadius: '8px',
-                      fontSize: '0.78rem',
-                      fontWeight: 700,
-                      background: activeRightTab === id ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255,255,255,0.05)',
-                      color: activeRightTab === id ? '#c4b5fd' : 'var(--text-muted)',
-                      border: activeRightTab === id ? '1px solid rgba(139, 92, 246, 0.4)' : '1px solid transparent',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '5px'
-                    }}
-                  >
-                    <Icon size={13} />
-                    {label}
-                    <span style={{ fontSize: '0.68rem', padding: '1px 5px', borderRadius: '999px', background: 'rgba(255,255,255,0.1)' }}>
-                      {count(currentSession)}
-                    </span>
-                  </button>
-                ))}
-              </div>
-
-              <div role="tabpanel" style={{ flex: 1, minHeight: 0, overflowY: activeRightTab === 'topics' ? 'auto' : 'hidden' }}>
-                {activeRightTab === 'topics' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <TopicsPanel session={currentSession} />
-                    <div style={{ minHeight: '340px' }}>
-                      <LiveQuestionPrompter
-                        questions={currentSession.liveQuestions}
-                        onMarkAsked={handleMarkQuestionAsked}
-                        onTriggerAnalysis={handleAnalyzeSessionWithAI}
-                        isAnalyzing={isAnalyzingLive}
-                      />
-                    </div>
-                  </div>
-                )}
-                {activeRightTab === 'mindmap' && (
-                  <MindMapCanvas
-                    nodes={currentSession.mindMapNodes}
-                    onRename={(id, label) => handleEditSession(s => renameNode(s, id, label))}
-                    onAddChild={(parentId, label) => handleEditSession(s => addChildNode(s, parentId, label))}
-                    onDelete={id => handleEditSession(s => deleteNode(s, id))}
-                    onRefresh={handleRefreshMap}
-                    onTriggerAnalysis={handleAnalyzeSessionWithAI}
-                    isAnalyzing={isAnalyzingLive}
-                  />
-                )}
-                {activeRightTab === 'userflow' && (
-                  <UserFlowView
-                    steps={currentSession.userFlowSteps}
-                    onAdd={data => handleEditSession(s => addStep(s, data))}
-                    onUpdate={(id, patch) => handleEditSession(s => updateStep(s, id, patch))}
-                    onRemove={id => handleEditSession(s => removeStep(s, id))}
-                    onMove={(id, dir) => handleEditSession(s => moveStep(s, id, dir))}
-                    onRefresh={handleRefreshJourney}
-                  />
-                )}
-                {activeRightTab === 'storymap' && (
-                  <StoryMapView
-                    session={currentSession}
-                    onAddCard={data => handleEditSession(s => addStoryMapCard(s, data))}
-                    onUpdateCard={(cardId, patch) => handleEditSession(s => updateStoryMapCard(s, cardId, patch))}
-                    onMoveCard={(cardId, target) => handleEditSession(s => moveStoryMapCard(s, cardId, target))}
-                    onRemoveCard={cardId => handleEditSession(s => removeStoryMapCard(s, cardId))}
-                    onRefresh={handleRefreshStoryMap}
-                    onProposeBacklog={handleProposeStoryMapToBacklog}
-                  />
-                )}
-                {activeRightTab === 'prototype' && (
-                  <PrototypeView
-                    session={currentSession}
-                    projectName={activeProject.name}
-                    isGenerating={isGeneratingPrototype}
-                    onGenerateOffline={handleGenerateOfflinePrototype}
-                    onGenerateAI={handleGenerateAIPrototype}
-                  />
-                )}
-                {activeRightTab === 'minutes' && (
-                  <MinutesPanel
-                    session={currentSession}
-                    projectName={activeProject.name}
-                    onGenerate={handleGenerateMinutes}
-                    onGenerateBacklog={handleGenerateBacklogWithAI}
-                    isGeneratingBacklog={isGeneratingBacklog}
-                  />
-                )}
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: '16px' }}>
-            <AgentPanel scope="meeting" title="Agentes de reunião (sobre a sessão atual)" project={activeProject} session={currentSession} />
-          </div>
-          </>
         )}
 
         {/* VIEW: HISTÓRICO DE REUNIÕES & FOLLOW-UP */}

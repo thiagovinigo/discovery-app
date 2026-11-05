@@ -1,11 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildMinutes,
+  generateMinutesWithAI,
   minutesToMarkdown,
   minutesToObsidianMarkdown,
   minutesToPrintableHtml,
+  updateMinutes,
   withMinutes
 } from './minutesService';
+import { storageService } from './storageService';
 import type { MeetingSession, Stakeholder, TranscriptSegment } from '../types/discovery';
 
 let counter = 0;
@@ -22,6 +25,10 @@ const session = (segments: TranscriptSegment[], over: Partial<MeetingSession> = 
 });
 
 const NOW = new Date('2026-02-01T15:00:00Z');
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 describe('buildMinutes', () => {
   it('reunião vazia gera uma ata vazia, sem inventar nada', () => {
@@ -126,7 +133,7 @@ describe('buildMinutes', () => {
   });
 });
 
-describe('withMinutes', () => {
+describe('withMinutes & updateMinutes (E11.8)', () => {
   it('guarda a ata na sessão sem mexer na original', () => {
     const base = session([seg('Ficou decidido que vamos adotar o novo fluxo')]);
 
@@ -134,6 +141,55 @@ describe('withMinutes', () => {
 
     expect(next.minutes?.decisions).toHaveLength(1);
     expect(base.minutes).toBeUndefined();
+  });
+
+  it('updateMinutes permite editar resumo, decisões, ações combinadas e perguntas em aberto de forma imutável', () => {
+    const withM = withMinutes(session([seg('Ficou decidido que vamos adotar o novo fluxo')]), [], NOW);
+
+    const edited = updateMinutes(withM, {
+      summary: 'Resumo revisado pelo PO',
+      actionItems: [{ item: 'Configurar webhook', owner: 'Ana Souza', deadline: '10/03' }]
+    });
+
+    expect(edited.minutes?.summary).toBe('Resumo revisado pelo PO');
+    expect(edited.minutes?.actionItems).toEqual([{ item: 'Configurar webhook', owner: 'Ana Souza', deadline: '10/03' }]);
+    expect(withM.minutes?.actionItems).toEqual([]);
+  });
+
+  it('generateMinutesWithAI detecta decisões e prazos por IA quando há chave e faz fallback para regras locais sem chave', async () => {
+    const s = session([
+      seg('Batemos o martelo em migrar o faturamento para o módulo novo', 'Entrevistador (PM)'),
+      seg('Camila entrega o mapeamento de campos até dia 18', 'Usuário / Stakeholder')
+    ]);
+
+    // Sem chave: devolve buildMinutes local
+    const offline = await generateMinutesWithAI(s, [ana]);
+    expect(offline.summary).toMatch(/2 falas/);
+
+    // Com chave: enriquece decisões e actionItems via IA
+    storageService.setOpenAiApiKey('sk-test-minutes');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                decisions: [{ text: 'Migrar faturamento para o módulo novo', speaker: 'Entrevistador', timestamp: '00:10' }],
+                actionItems: [{ item: 'Entregar mapeamento de campos', owner: 'Camila', deadline: 'até dia 18' }],
+                openQuestions: ['Qual o volume de notas por hora?']
+              })
+            }
+          }
+        ]
+      })
+    } as Response);
+
+    const enriched = await generateMinutesWithAI(s, [ana]);
+    expect(enriched.decisions.some(d => d.text.includes('Migrar faturamento'))).toBe(true);
+    expect(enriched.actionItems.some(a => a.owner === 'Camila' && a.deadline === 'até dia 18')).toBe(true);
+    expect(enriched.openQuestions).toContain('Qual o volume de notas por hora?');
+    fetchSpy.mockRestore();
   });
 });
 
