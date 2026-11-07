@@ -17,7 +17,8 @@ import {
   CalendarClock,
   MessageCircle,
   NotebookPen,
-  Users
+  Users,
+  Workflow
 } from 'lucide-react';
 
 export type AppView =
@@ -36,7 +37,8 @@ export type AppView =
   | 'stakeholders'
   | 'interview'
   | 'notes'
-  | 'agenda';
+  | 'agenda'
+  | 'automation_discovery';
 
 interface SidebarProps {
   activeView: AppView;
@@ -86,6 +88,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       step: 'ETAPA 3',
       title: 'Análise',
       items: [
+        { id: 'automation_discovery', label: 'Discovery IA & Automação', icon: <Workflow size={16} />, badge: '10 Abas', highlight: true },
         { id: 'brain_dashboard', label: 'Segundo Cérebro (C.O.D.E.)', icon: <Brain size={16} /> },
         { id: 'product_audit', label: 'Banca Validadora PM/UX', icon: <ShieldCheck size={16} /> }
       ]

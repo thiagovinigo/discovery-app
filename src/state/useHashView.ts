@@ -18,7 +18,8 @@ const VIEW_REGISTRY: Record<AppView, true> = {
   stakeholders: true,
   interview: true,
   notes: true,
-  agenda: true
+  agenda: true,
+  automation_discovery: true
 };
 
 export const APP_VIEWS = Object.keys(VIEW_REGISTRY) as AppView[];

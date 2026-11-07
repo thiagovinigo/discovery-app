@@ -491,4 +491,178 @@ export interface DiscoveryProject {
   interview?: InterviewState;
   /** Mais recente primeiro. */
   backlogHistory?: BacklogSnapshot[];
+  /** Metodologia de Discovery de IA e Automação (Épico E13). */
+  automationDiscovery?: AutomationDiscoveryData;
+}
+
+
+// =============================================================================================
+// Épico E13: Discovery de IA e Automação (Processos, Dados, Oportunidades & Readout Executivo)
+// =============================================================================================
+
+export type ChecklistPhase = 'Antes' | 'Durante' | 'Depois';
+export type ChecklistItemStatus = 'Pendente' | 'Em andamento' | 'Feito' | 'N/A';
+
+export interface DiscoveryChecklistItem {
+  number: number; // 1 a 17
+  phase: ChecklistPhase;
+  item: string;
+  why: string;
+  owner: string;
+  status: ChecklistItemStatus;
+  notes: string;
+}
+
+export type DiscoveryAreaStatus = 'A agendar' | 'Agendada' | 'Realizada' | 'Consolidada';
+
+export interface DiscoveryArea {
+  id: string;
+  name: string;
+  managerName: string;
+  role: string;
+  executiveSponsor: string;
+  interviewDate: string;
+  status: DiscoveryAreaStatus;
+  headcount: number;
+  location: string;
+  mainKpis: string;
+  yearGoals: string;
+  mainSystems: string;
+  currentAiUsage: string;
+  digitalMaturity: 1 | 2 | 3 | 4 | 5;
+  declaredPain: string;
+  followUpContacts: string;
+  notes: string; // Inclui as 3 hipóteses anotadas antes da entrevista
+}
+
+export type ScriptFeedsTab =
+  | '—'
+  | 'Ficha da Área'
+  | 'Processos'
+  | 'Sistemas e Dados'
+  | 'Oportunidades'
+  | 'Checklist';
+
+export interface InterviewScriptQuestion {
+  blockId: string;
+  blockTitle: string;
+  blockMinutes: number;
+  number: string; // ex: '1.1', '3.5'
+  question: string;
+  whatToLookFor: string;
+  probing: string;
+  feedsTab: ScriptFeedsTab;
+}
+
+export type ProcessFrequency = 'Diária' | 'Semanal' | 'Quinzenal' | 'Mensal' | 'Por evento';
+export type YesPartialNo = 'Sim' | 'Parcial' | 'Não';
+export type CandidateSolutionType =
+  | 'Automação n8n'
+  | 'Agente de IA'
+  | 'Assistente Claude'
+  | 'Analytics / BI'
+  | 'Redesenho de processo'
+  | 'Não se aplica';
+
+export interface ProcessSheet {
+  id: string; // ex: 'P-01', 'P-02'
+  area: string; // Q1
+  name: string; // Q2: verbo + objeto
+  trigger: string; // Q3
+  mainSteps: string; // Q4
+  finalDeliverable: string; // Q5
+  ownerRole: string; // Q6: cargo, não nome
+  frequency: ProcessFrequency; // Q7
+  monthlyVolume?: number; // Q8: número 1 dos 4 números obrigatórios
+  standardMinutes?: number; // Q9: número 2 dos 4 números obrigatórios
+  peopleInvolved?: number; // Q10: número 3 dos 4 números obrigatórios
+  exceptionRate?: number; // Q11: número 4 dos 4 números obrigatórios (fração 0..1, ex: 0.20 = 20%)
+  exceptionMinutes?: number; // Q12
+  systemsUsed: string; // Q13
+  dataInputFormat: string; // Q14
+  structuredData: YesPartialNo; // Q15
+  documentedRules: YesPartialNo; // Q16
+  bottlenecks: string; // Q17
+  errorImpact: string; // Q18
+  literalPainQuote: string; // Q19
+  seasonality: string; // Q20
+  customHourlyCost?: number; // Q21 (opcional; se vazio usa o custo-hora da Capa)
+  candidateSolution: CandidateSolutionType; // Q22
+}
+
+export type SystemCategory =
+  | 'ERP'
+  | 'WMS'
+  | 'PDV'
+  | 'CRM'
+  | 'BI'
+  | 'Planilha'
+  | 'Portal externo'
+  | 'Comunicação'
+  | 'RH'
+  | 'Outro';
+
+export interface DiscoverySystem {
+  id: string;
+  name: string;
+  type: SystemCategory;
+  areasUsing: string;
+  purpose: string;
+  technicalOwner: string;
+  hasApi: 'Sim' | 'Não' | 'Não sei';
+  dataQuality: 1 | 2 | 3 | 4 | 5;
+  hasPersonalDataLgpd: 'Sim' | 'Não';
+  securityRestrictions: string;
+  notes: string;
+}
+
+export type RoadmapWave = '0–30 dias' | '31–60 dias' | '61–90 dias' | 'Backlog';
+export type OpportunityStatus = 'Mapeada' | 'Validada com a área' | 'Aprovada' | 'Descartada';
+export type OpportunityQuadrant =
+  | 'Quick win'
+  | 'Projeto estratégico'
+  | 'Melhoria incremental'
+  | 'Rever / backlog';
+
+export interface AutomationOpportunity {
+  id: string; // ex: 'O-01', 'O-02'
+  title: string; // O que faz, sobre qual processo e onde fica o controle humano
+  processId: string; // Vínculo com P-01..P-80
+  solutionType: CandidateSolutionType;
+  automatizableFraction: number; // 0..1 (ex: 0.75 = 75%)
+  otherGains: string;
+  impact?: 1 | 2 | 3 | 4 | 5;
+  effort?: 1 | 2 | 3 | 4 | 5;
+  risk?: 1 | 2 | 3 | 4 | 5;
+  dataReadiness?: 1 | 2 | 3 | 4 | 5;
+  roadmapWave: RoadmapWave;
+  ownerSponsor: string;
+  nextStep: string;
+  status: OpportunityStatus;
+}
+
+export interface DiscoveryPremises {
+  clientName: string;
+  discoveryPeriod: string;
+  consultant: string;
+  loadedHourlyCost: number; // R$, padrão 45
+  hourlyCostSource: string; // ex: 'Padrão R$ 45/h — ajustar com RH ou controladoria'
+  weightImpact: number; // padrão 0.40
+  weightDataReadiness: number; // padrão 0.20
+  weightEffort: number; // padrão 0.25 (invertido: 6 - esforço)
+  weightRisk: number; // padrão 0.15 (invertido: 6 - risco)
+  highImpactCutoff: number; // padrão 4 (Impacto >= 4 é alto impacto)
+  lowEffortCutoff: number; // padrão 2 (Esforço <= 2 é baixo esforço)
+}
+
+export interface AutomationDiscoveryData {
+  premises: DiscoveryPremises;
+  checklist: DiscoveryChecklistItem[];
+  areas: DiscoveryArea[];
+  /** Respostas do roteiro 2h por área: `scriptAnswersByArea[areaId][questionNumber] = anotação`. */
+  scriptAnswersByArea: Record<string, Record<string, string>>;
+  processes: ProcessSheet[];
+  systems: DiscoverySystem[];
+  opportunities: AutomationOpportunity[];
+  updatedAt: string;
 }

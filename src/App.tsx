@@ -68,6 +68,7 @@ import { ProductAuditView } from './components/ProductAuditView';
 import { LiveRoomView } from './components/LiveRoomView';
 import type { RightTab } from './components/LiveRoomView';
 import type { AppView } from './components/Sidebar';
+import { AutomationDiscoveryView } from './components/AutomationDiscoveryView';
 import { applySuggestions, assignSpeaker, suggestSpeakers } from './services/speakerService';
 import { generateMinutesWithAI, withMinutes } from './services/minutesService';
 
@@ -900,6 +901,27 @@ export const App: React.FC = () => {
             project={activeProject}
             activeSession={currentSession}
             onNavigateToView={(view) => setActiveView(view)}
+          />
+        )}
+
+        {/* VIEW: DISCOVERY DE IA E AUTOMAÇÃO (ÉPICO E13) */}
+        {activeView === 'automation_discovery' && (
+          <AutomationDiscoveryView
+            project={activeProject}
+            activeSession={currentSession}
+            onSaveAutomationDiscovery={(nextData) => {
+              saveProject({ ...activeProject, automationDiscovery: nextData });
+            }}
+            onProposeToBacklog={(proposals) => {
+              setPendingReview({
+                projectId: activeProject.id,
+                proposals,
+                sessionId: currentSession?.id,
+                type: 'discovery'
+              });
+              setActiveView('backlog');
+            }}
+            onNotify={(type, text) => showNotice(type, text)}
           />
         )}
 

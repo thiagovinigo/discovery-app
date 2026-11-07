@@ -46,7 +46,7 @@ describe('Sidebar: as 5 áreas e o menu de apoio', () => {
 
     expect(viewsOf('Visão')).toEqual(['project_hub', 'stakeholders', 'notes']);
     expect(viewsOf('Captura')).toEqual(['agenda', 'live_room', 'meetings']);
-    expect(viewsOf('Análise')).toEqual(['brain_dashboard', 'product_audit']);
+    expect(viewsOf('Análise')).toEqual(['automation_discovery', 'brain_dashboard', 'product_audit']);
     expect(viewsOf('Backlog')).toEqual(['backlog', 'refine']);
     expect(viewsOf('Entrega')).toEqual(['documentation', 'agent_studio']);
     expect(viewsOf('Copiloto & Biblioteca')).toEqual(['interview', 'po_space', 'knowledge_hub']);
