@@ -4,29 +4,26 @@ import {
   Plus,
   Radio,
   Zap,
-  ArrowRight,
   Calendar,
   Sparkles,
   Flame,
-  Target,
-  Layers,
-  Brain,
   Upload,
-  BookOpen,
-  Bot,
-  PlayCircle,
-  FileText,
-  ShieldCheck,
   Rocket,
   Trash2,
-  RotateCcw
+  CheckCircle2,
+  Workflow
 } from 'lucide-react';
 import { DiscoveryProject } from '../types/discovery';
+import {
+  PROJECT_BLUEPRINTS,
+  getProjectBlueprint,
+  type ProjectBlueprintId
+} from '../services/projectBlueprints';
 
 interface ProjectsHomeViewProps {
   projects: DiscoveryProject[];
   onOpenProject: (projectId: string, targetView?: any) => void;
-  onCreateProject: (name: string, description: string) => void;
+  onCreateProject: (name: string, description: string, blueprintId?: ProjectBlueprintId) => void;
   onImportProject: (jsonString: string) => void;
   onDeleteProject?: (projectId: string) => void;
   onResetAllData?: () => void;
@@ -39,13 +36,17 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
   onCreateProject,
   onImportProject,
   onDeleteProject,
-  onResetAllData,
-  onNavigateToKnowledge
+  onResetAllData
 }) => {
   const [creating, setCreating] = useState(false);
+  const [selectedBlueprintId, setSelectedBlueprintId] = useState<ProjectBlueprintId>('blank');
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmResetAll, setConfirmResetAll] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const selectedBlueprint = getProjectBlueprint(selectedBlueprintId);
 
   const totalSessions = projects.reduce((acc, p) => acc + p.sessions.length, 0);
   const totalEpics = projects.reduce((acc, p) => acc + p.epics.length, 0);
@@ -58,12 +59,20 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
     0
   );
 
+  const handleSelectBlueprint = (blueprintId: ProjectBlueprintId) => {
+    const spec = getProjectBlueprint(blueprintId);
+    setSelectedBlueprintId(blueprintId);
+    setName(spec.defaultName);
+    setDescription(spec.defaultDescription);
+  };
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onCreateProject(name.trim(), description.trim());
+    onCreateProject(name.trim(), description.trim(), selectedBlueprintId);
     setName('');
     setDescription('');
+    setSelectedBlueprintId('blank');
     setCreating(false);
   };
 
@@ -111,14 +120,14 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
         <div style={{ maxWidth: '640px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
             <span className="badge badge-primary" style={{ padding: '4px 10px', fontSize: '0.72rem' }}>
-              Discovery ao Done · Central de Produtos
+              Discovery ao Done · Central de Produtos & Automação
             </span>
           </div>
           <h1 style={{ fontSize: '1.85rem', fontWeight: 800, letterSpacing: '-0.02em', marginBottom: '10px' }}>
-            Transforme conversas com clientes em backlogs acionáveis
+            Transforme conversas com clientes em backlogs e roadmaps acionáveis
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.5 }}>
-            Escolha um projeto existente ou crie um novo para conduzir novas entrevistas ao vivo com escuta de áudio, mapear mapas mentais, fatiar histórias no padrão INVEST com critérios Given/When/Then e coordenar entregas com copiloto de IA.
+            Escolha um projeto existente ou inicie a partir de um Blueprint estruturado (Consultoria de Discovery de IA & Automação, Produto Digital SaaS, Operações ERP, Fintech ou Healthtech) com áreas, sistemas, roteiro de entrevista e motor Jev prontos para operar.
           </p>
         </div>
 
@@ -219,7 +228,7 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
               </div>
             </div>
             <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: '1.45', margin: '4px 0 0 0' }}>
-              Crie novas iniciativas, importe projetos em JSON e visualize o resumo de dores e épicos cadastrados no seu portfólio.
+              Crie novas iniciativas com Blueprints estruturados, importe projetos em JSON e acompanhe o resumo de sessões, processos e épicos do portfólio.
             </p>
             <div style={{ marginTop: 'auto', paddingTop: '8px' }}>
               <button
@@ -244,7 +253,7 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
               </div>
             </div>
             <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: '1.45', margin: '4px 0 0 0' }}>
-              Nos cartões abaixo, clique no botão principal <strong>"Entrar no Projeto & Abrir Ferramentas"</strong> para abrir a área de trabalho dedicada à iniciativa selecionada.
+              Nos cartões abaixo, clique no botão principal <strong>"Entrar no Projeto & Abrir Ferramentas"</strong> ou acesse direto o <strong>Discovery de IA (10 Abas)</strong>.
             </p>
             <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.72rem', color: '#67e8f9', background: 'rgba(6, 182, 212, 0.1)', padding: '6px 10px', borderRadius: '6px' }}>
               💡 Você pode retornar à Gestão de Projetos a qualquer momento clicando em <strong>[← Gestão de Projetos]</strong>.
@@ -266,70 +275,93 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
               Ao entrar no projeto, a barra lateral e o cabeçalho ativam todas as ferramentas específicas daquele projeto:
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '4px' }}>
+              <span>🤖 <strong>Discovery IA (10 Abas + Jev):</strong> Processos P-01, Sistemas e Readout</span>
               <span>🎙️ <strong>Gravações ao Vivo:</strong> Transcrição, dores literais e Mom Test</span>
               <span>⚡ <strong>Backlog BDD:</strong> Épicos, Stories Given/When/Then e RICE</span>
               <span>📄 <strong>PRD & SPEC:</strong> Especificações prontas para Cursor/Claude</span>
-              <span>🤖 <strong>6 Agentes IA:</strong> PO Copilot, Arquiteto, QA e Git Crawler</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Formulário de Criação Rápida */}
+      {/* Formulário de Criação com Blueprints Estruturados */}
       {creating && (
-        <form onSubmit={submit} className="glass-panel animate-slide-down" style={{ padding: '24px', maxWidth: '680px', border: '1px solid var(--primary)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
-            <Sparkles size={20} color="var(--primary)" />
-            <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>Criar Novo Projeto de Discovery</h3>
+        <form onSubmit={submit} className="glass-panel animate-slide-down" style={{ padding: '24px', maxWidth: '940px', border: '1px solid var(--primary)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Sparkles size={20} color="var(--primary)" />
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>Criar Novo Projeto de Discovery</h3>
+            </div>
+            <span className="badge badge-cyan" style={{ fontSize: '0.7rem' }}>
+              Blueprints Metodológicos · Sem dados fictícios
+            </span>
           </div>
 
-          {/* Templates Aceleradores */}
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '8px', textTransform: 'uppercase' }}>
-              Selecione um template para preencher automaticamente:
+          {/* Seletor de Blueprints */}
+          <div style={{ marginBottom: '18px' }}>
+            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-dim)', marginBottom: '10px', textTransform: 'uppercase' }}>
+              1. Escolha um Blueprint estrutural (ou comece em branco):
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setName('Plataforma de Liquidação & Conciliação Inteligente');
-                  setDescription('Eliminar gargalos manuais no fechamento financeiro de lojistas B2B através de conciliação em tempo real e automação de split.');
-                }}
-                style={{ padding: '8px 10px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', color: '#a5b4fc', fontSize: '0.75rem', textAlign: 'left', cursor: 'pointer' }}
-              >
-                💳 Fintech B2B (Conciliação & Lotes)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setName('Healthtech: Onboarding Clínico & Prontuário Ágil');
-                  setDescription('Reduzir tempo de anamnese e eliminar abandono de médicos especialistas na prescrição digital.');
-                }}
-                style={{ padding: '8px 10px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#6ee7b7', fontSize: '0.75rem', textAlign: 'left', cursor: 'pointer' }}
-              >
-                🏥 Healthtech (Prontuário Médico)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setName('E-commerce: Logística Reversa & Trocas Automáticas');
-                  setDescription('Eliminar 12 dias de espera do consumidor em trocas e reduzir custos de SAC em 45%.');
-                }}
-                style={{ padding: '8px 10px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#fcd34d', fontSize: '0.75rem', textAlign: 'left', cursor: 'pointer' }}
-              >
-                📦 E-commerce (Logística Reversa)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setName('');
-                  setDescription('');
-                }}
-                style={{ padding: '8px 10px', borderRadius: '8px', background: 'rgba(255, 255, 255, 0.05)', border: '1px solid var(--border-subtle)', color: 'var(--text-main)', fontSize: '0.75rem', textAlign: 'left', cursor: 'pointer' }}
-              >
-                ⚡ Projeto em Branco (Customizado)
-              </button>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))', gap: '10px' }}>
+              {PROJECT_BLUEPRINTS.map(bp => {
+                const isSelected = selectedBlueprintId === bp.id;
+                return (
+                  <button
+                    key={bp.id}
+                    type="button"
+                    data-testid={`blueprint-card-${bp.id}`}
+                    onClick={() => handleSelectBlueprint(bp.id)}
+                    style={{
+                      padding: '12px 14px',
+                      borderRadius: '10px',
+                      background: isSelected ? 'rgba(99, 102, 241, 0.18)' : 'rgba(15, 23, 42, 0.75)',
+                      border: isSelected ? '2px solid var(--primary)' : '1px solid var(--border-subtle)',
+                      color: 'var(--text-main)',
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '5px',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                      <span style={{ fontSize: '0.64rem', fontWeight: 800, color: isSelected ? '#a5b4fc' : 'var(--accent-cyan)', textTransform: 'uppercase' }}>
+                        {bp.badge}
+                      </span>
+                      {isSelected && <CheckCircle2 size={14} color="#a5b4fc" />}
+                    </div>
+                    <div style={{ fontSize: '0.84rem', fontWeight: 800 }}>{bp.title}</div>
+                    <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>
+                      {bp.subtitle}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
+
+            {/* Resumo do que o Blueprint selecionado prepara */}
+            {selectedBlueprint.highlights.length > 0 && (
+              <div
+                style={{
+                  marginTop: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  background: 'rgba(6, 182, 212, 0.08)',
+                  border: '1px solid rgba(6, 182, 212, 0.28)',
+                  fontSize: '0.75rem'
+                }}
+              >
+                <div style={{ fontWeight: 800, color: '#67e8f9', marginBottom: '6px' }}>
+                  O que este Blueprint prepara automaticamente no projeto ({selectedBlueprint.title}):
+                </div>
+                <ul style={{ margin: 0, paddingLeft: '18px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  {selectedBlueprint.highlights.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
 
           <div style={{ marginBottom: '14px' }}>
@@ -379,32 +411,57 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
               Seus Projetos de Discovery & Delivery
             </h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-              Selecione onde você deseja trabalhar com novas reuniões, fatiamento de backlog ou copiloto de IA:
+              Selecione onde você deseja trabalhar com novas reuniões, diagnóstico de automação, fatiamento de backlog ou copiloto de IA:
             </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             {onResetAllData && projects.length > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('Apagar TODOS os projetos deste navegador? Isso não pode ser desfeito. Exporte um backup em JSON antes, se precisar.')) {
-                    onResetAllData();
-                  }
-                }}
-                className="btn btn-secondary"
-                style={{
-                  fontSize: '0.78rem',
-                  gap: '6px',
-                  color: '#f43f5e',
-                  borderColor: 'rgba(244, 63, 94, 0.35)',
-                  background: 'rgba(244, 63, 94, 0.08)'
-                }}
-                title="Apaga todos os projetos e reuniões deste navegador, deixando o app vazio"
-              >
-                <Trash2 size={14} />
-                Apagar todos os projetos
-              </button>
+              !confirmResetAll ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmResetAll(true)}
+                  className="btn btn-secondary"
+                  style={{
+                    fontSize: '0.78rem',
+                    gap: '6px',
+                    color: '#f43f5e',
+                    borderColor: 'rgba(244, 63, 94, 0.35)',
+                    background: 'rgba(244, 63, 94, 0.08)'
+                  }}
+                  title="Apaga todos os projetos e reuniões deste navegador, deixando o app vazio"
+                >
+                  <Trash2 size={14} />
+                  Apagar todos os projetos
+                </button>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onResetAllData();
+                      setConfirmResetAll(false);
+                    }}
+                    className="btn btn-secondary"
+                    style={{
+                      fontSize: '0.76rem',
+                      color: '#ffffff',
+                      background: '#e11d48',
+                      borderColor: '#f43f5e'
+                    }}
+                  >
+                    Confirmar limpeza total
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmResetAll(false)}
+                    className="btn btn-ghost"
+                    style={{ fontSize: '0.76rem' }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )
             )}
           </div>
         </div>
@@ -413,8 +470,8 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
           <div className="glass-panel" style={{ padding: '48px 24px', textAlign: 'center', borderRadius: '16px', border: '1px dashed var(--border-subtle)' }}>
             <FolderOpen size={44} color="var(--accent-cyan)" style={{ margin: '0 auto 16px auto', opacity: 0.8 }} />
             <h3 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '8px' }}>Nenhum projeto cadastrado</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: '420px', margin: '0 auto 20px auto' }}>
-              Comece criando o seu primeiro projeto: descreva o objetivo, cadastre as pessoas envolvidas, marque reuniões e monte o backlog a partir do que ouvir.
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', maxWidth: '460px', margin: '0 auto 20px auto' }}>
+              Comece criando o seu primeiro projeto com um Blueprint estruturado ou em branco: descreva o objetivo, cadastre as áreas ou pessoas envolvidas, conduza entrevistas e monte o backlog a partir do que ouvir.
             </p>
             <button onClick={() => setCreating(true)} className="btn btn-primary" style={{ gap: '8px', margin: '0 auto' }}>
               <Plus size={16} /> Criar Meu Primeiro Projeto
@@ -425,6 +482,8 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
             {projects.map(p => {
               const stories = p.epics.reduce((n, e) => n + e.features.reduce((m, f) => m + f.userStories.length, 0), 0);
               const pains = p.sessions.reduce((n, s) => n + s.painPoints.length, 0);
+              const mappedProcesses = p.automationDiscovery?.processes.length ?? 0;
+              const mappedOpps = p.automationDiscovery?.opportunities.length ?? 0;
               const updated = new Date(p.updatedAt);
 
               return (
@@ -459,94 +518,141 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
                     </div>
 
                     {onDeleteProject && (
+                      confirmDeleteId !== p.id ? (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setConfirmDeleteId(p.id);
+                          }}
+                          className="btn btn-ghost"
+                          style={{ padding: '6px', color: '#f43f5e', opacity: 0.6 }}
+                          title="Excluir este projeto"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteProject(p.id);
+                              setConfirmDeleteId(null);
+                            }}
+                            className="btn btn-secondary"
+                            style={{ padding: '4px 8px', fontSize: '0.7rem', background: '#e11d48', color: '#fff', borderColor: '#f43f5e' }}
+                          >
+                            Confirmar exclusão
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteId(null);
+                            }}
+                            className="btn btn-ghost"
+                            style={{ padding: '4px 6px', fontSize: '0.7rem' }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      )
+                    )}
+                  </div>
+
+                  {/* Descrição */}
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.45, minHeight: '2.9em' }}>
+                    {p.description.length > 150 ? p.description.slice(0, 150) + '…' : p.description}
+                  </p>
+
+                  {/* Badges de Indicadores */}
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '0.75rem' }}>
+                    <span className="badge badge-primary" style={{ gap: '4px', display: 'inline-flex', alignItems: 'center' }}>
+                      <Radio size={12} /> {p.sessions.length} reuniões
+                    </span>
+                    <span className="badge badge-primary" style={{ gap: '4px', display: 'inline-flex', alignItems: 'center' }}>
+                      <Zap size={12} /> {p.epics.length} épicos · {stories} histórias
+                    </span>
+                    <span className="badge badge-primary" style={{ gap: '4px', display: 'inline-flex', alignItems: 'center' }}>
+                      <Flame size={12} color="#f43f5e" /> {pains} dores
+                    </span>
+                    {(mappedProcesses > 0 || mappedOpps > 0 || (p.automationDiscovery?.areas.length ?? 0) > 0) && (
+                      <span className="badge badge-cyan" style={{ gap: '4px', display: 'inline-flex', alignItems: 'center' }}>
+                        <Workflow size={12} /> {mappedProcesses} proc. · {mappedOpps} oport. IA
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Botões de Ação Direta no Projeto */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '14px' }}>
+                    <button
+                      id={`btn-enter-project-${p.id}`}
+                      onClick={() => onOpenProject(p.id, 'project_hub')}
+                      className="btn btn-primary"
+                      style={{
+                        width: '100%',
+                        padding: '11px 16px',
+                        fontSize: '0.88rem',
+                        fontWeight: 800,
+                        gap: '8px',
+                        justifyContent: 'center',
+                        background: 'linear-gradient(135deg, #6366f1, #06b6d4)',
+                        boxShadow: '0 0 16px rgba(6, 182, 212, 0.3)',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      <Rocket size={16} />
+                      <span>Entrar no Projeto & Abrir Ferramentas ➔</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onOpenProject(p.id, 'automation_discovery')}
+                      className="btn btn-secondary"
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        fontSize: '0.78rem',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Workflow size={14} />
+                      <span>Abrir Discovery de IA & Automação (10 Abas + Jev)</span>
+                    </button>
+
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '2px' }}>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        Criado com Discovery ao Done
+                      </span>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (window.confirm(`Tem certeza que deseja excluir o projeto "${p.name}"?`)) {
-                            onDeleteProject(p.id);
-                          }
+                          const json = JSON.stringify(p, null, 2);
+                          const blob = new Blob([json], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `${p.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_backup.json`;
+                          a.click();
+                          URL.revokeObjectURL(url);
                         }}
                         className="btn btn-ghost"
-                        style={{ padding: '6px', color: '#f43f5e', opacity: 0.6 }}
-                        title="Excluir este projeto"
+                        style={{ fontSize: '0.72rem', padding: '4px 8px', gap: '4px', color: 'var(--text-dim)' }}
+                        title="Exportar backup completo deste projeto em JSON"
                       >
-                        <Trash2 size={15} />
+                        <Upload size={12} style={{ transform: 'rotate(180deg)' }} /> Exportar JSON
                       </button>
-                    )}
-                  </div>
-
-                {/* Descrição */}
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.45, minHeight: '2.9em' }}>
-                  {p.description.length > 150 ? p.description.slice(0, 150) + '…' : p.description}
-                </p>
-
-                {/* Badges de Indicadores */}
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', fontSize: '0.75rem' }}>
-                  <span className="badge badge-primary" style={{ gap: '4px', display: 'inline-flex', alignItems: 'center' }}>
-                    <Radio size={12} /> {p.sessions.length} reuniões
-                  </span>
-                  <span className="badge badge-primary" style={{ gap: '4px', display: 'inline-flex', alignItems: 'center' }}>
-                    <Zap size={12} /> {p.epics.length} épicos · {stories} histórias
-                  </span>
-                  <span className="badge badge-primary" style={{ gap: '4px', display: 'inline-flex', alignItems: 'center' }}>
-                    <Flame size={12} color="#f43f5e" /> {pains} dores
-                  </span>
-                </div>
-
-                {/* Botões de Ação Direta no Projeto */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '4px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '14px' }}>
-                  <button
-                    id={`btn-enter-project-${p.id}`}
-                    onClick={() => onOpenProject(p.id, 'project_hub')}
-                    className="btn btn-primary"
-                    style={{
-                      width: '100%',
-                      padding: '11px 16px',
-                      fontSize: '0.88rem',
-                      fontWeight: 800,
-                      gap: '8px',
-                      justifyContent: 'center',
-                      background: 'linear-gradient(135deg, #6366f1, #06b6d4)',
-                      boxShadow: '0 0 16px rgba(6, 182, 212, 0.3)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    <Rocket size={16} />
-                    <span>Entrar no Projeto & Abrir Ferramentas ➔</span>
-                  </button>
-
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '4px' }}>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                      Criado com Discovery ao Done
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const json = JSON.stringify(p, null, 2);
-                        const blob = new Blob([json], { type: 'application/json' });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `${p.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_backup.json`;
-                        a.click();
-                        URL.revokeObjectURL(url);
-                      }}
-                      className="btn btn-ghost"
-                      style={{ fontSize: '0.72rem', padding: '4px 8px', gap: '4px', color: 'var(--text-dim)' }}
-                      title="Exportar backup completo deste projeto em JSON"
-                    >
-                      <Upload size={12} style={{ transform: 'rotate(180deg)' }} /> Exportar JSON
-                    </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
-  </div>
   );
 };

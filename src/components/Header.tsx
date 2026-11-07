@@ -17,6 +17,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { exportService } from '../services/exportService';
+import { getProjectBlueprint, type ProjectBlueprintId } from '../services/projectBlueprints';
 
 interface HeaderProps {
   project?: DiscoveryProject | null;
@@ -24,7 +25,7 @@ interface HeaderProps {
   activeView?: AppView;
   onNavigate?: (view: AppView) => void;
   onSelectProject: (projectId: string) => void;
-  onCreateProject: (name: string, description: string) => void;
+  onCreateProject: (name: string, description: string, blueprintId?: ProjectBlueprintId) => void;
   onOpenSettings: () => void;
   onGoHome?: () => void;
   isRecording: boolean;
@@ -46,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [showNewProjModal, setShowNewProjModal] = useState(false);
   const [newProjName, setNewProjName] = useState('');
   const [newProjDesc, setNewProjDesc] = useState('');
+  const [newProjBlueprint, setNewProjBlueprint] = useState<ProjectBlueprintId>('blank');
   const [showExportMenu, setShowExportMenu] = useState(false);
 
   const formatTime = (seconds: number) => {
@@ -57,13 +59,14 @@ export const Header: React.FC<HeaderProps> = ({
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProjName.trim()) return;
-    onCreateProject(newProjName.trim(), newProjDesc.trim());
+    onCreateProject(newProjName.trim(), newProjDesc.trim(), newProjBlueprint);
     setNewProjName('');
     setNewProjDesc('');
     setShowNewProjModal(false);
   };
 
-  const handleApplyTemplate = (title: string, desc: string) => {
+  const handleApplyTemplate = (title: string, desc: string, blueprintId: ProjectBlueprintId = 'blank') => {
+    setNewProjBlueprint(blueprintId);
     setNewProjName(title);
     setNewProjDesc(desc);
   };
@@ -123,7 +126,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => handleApplyTemplate(
                 'Plataforma de Liquidação & Conciliação Inteligente',
-                'Eliminar gargalos manuais no fechamento financeiro de lojistas B2B através de conciliação em tempo real e automação de split.'
+                'Eliminar gargalos manuais no fechamento financeiro de lojistas B2B através de conciliação em tempo real e automação de split.', 'fintech_b2b'
               )}
               style={{
                 padding: '8px 10px',
@@ -146,7 +149,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => handleApplyTemplate(
                 'Healthtech: Onboarding Clínico & Prontuário Ágil',
-                'Reduzir tempo de anamnese e eliminar abandono de médicos especialistas na prescrição digital.'
+                'Reduzir tempo de anamnese e eliminar abandono de médicos especialistas na prescrição digital.', 'healthtech_clinical'
               )}
               style={{
                 padding: '8px 10px',
@@ -169,7 +172,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => handleApplyTemplate(
                 'E-commerce: Logística Reversa & Trocas Automáticas',
-                'Eliminar 12 dias de espera do consumidor em trocas e reduzir custos de SAC em 45%.'
+                'Eliminar 12 dias de espera do consumidor em trocas e reduzir custos de SAC em 45%.', 'operations_erp'
               )}
               style={{
                 padding: '8px 10px',
@@ -192,7 +195,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => {
                 setNewProjName('');
-                setNewProjDesc('');
+                setNewProjDesc(getProjectBlueprint('ai_automation_discovery').defaultDescription); setNewProjName(getProjectBlueprint('ai_automation_discovery').defaultName); setNewProjBlueprint('ai_automation_discovery');
               }}
               style={{
                 padding: '8px 10px',
@@ -208,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
                 gap: '6px'
               }}
             >
-              <Sparkles size={14} /> Projeto em Branco
+              <Sparkles size={14} /> Consultoria Discovery de IA & Automação
             </button>
           </div>
         </div>

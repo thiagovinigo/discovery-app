@@ -1,5 +1,6 @@
 import { DiscoveryProject, MeetingSession } from '../types/discovery';
 import { newId } from './ids';
+import { applyBlueprintToNewProject, type ProjectBlueprintId } from './projectBlueprints';
 
 const STORAGE_KEY_PROJECTS = 'discovery_done_projects_v1';
 const STORAGE_KEY_ACTIVE_PROJECT_ID = 'discovery_done_active_project_id_v1';
@@ -188,7 +189,7 @@ export const storageService = {
     return imported;
   },
 
-  createNewProject(name: string, description: string): DiscoveryProject {
+  createNewProject(name: string, description: string, blueprintId?: ProjectBlueprintId): DiscoveryProject {
     const newProj: DiscoveryProject = {
       id: newId('proj'),
       name: name || 'Novo Projeto de Discovery',
@@ -236,10 +237,10 @@ export const storageService = {
     };
 
     const projects = this.getAllProjects();
-    projects.unshift(newProj);
+    projects.unshift(blueprintId && blueprintId !== 'blank' ? applyBlueprintToNewProject(newProj, blueprintId) : newProj);
     this.saveAllProjects(projects);
     this.setActiveProjectId(newProj.id);
-    return newProj;
+    return projects[0];
   },
 
   deleteProject(projectId: string): DiscoveryProject[] {

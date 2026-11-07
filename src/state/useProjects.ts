@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { storageService } from '../services/storageService';
 import type { DiscoveryProject } from '../types/discovery';
+import type { ProjectBlueprintId } from '../services/projectBlueprints';
 
 interface ProjectsSnapshot {
   projects: DiscoveryProject[];
@@ -57,8 +58,8 @@ export function useProjects(options: UseProjectsOptions = {}) {
     refresh();
   }, [refresh]);
 
-  const create = useCallback((name: string, description: string): DiscoveryProject => {
-    const created = storageService.createNewProject(name, description);
+  const create = useCallback((name: string, description: string, blueprintId?: ProjectBlueprintId): DiscoveryProject => {
+    const created = storageService.createNewProject(name, description, blueprintId);
     refresh();
     return created;
   }, [refresh]);

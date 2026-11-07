@@ -289,6 +289,57 @@ export const AutomationDiscoveryView: React.FC<AutomationDiscoveryViewProps> = (
     }
   };
 
+  const handleRunJevBatch = async () => {
+    const activeOpps = data.opportunities.filter(o => o.status !== 'Descartada');
+    if (activeOpps.length === 0) {
+      onNotify?.('info', 'Nenhuma oportunidade ativa para decidir com Jev.');
+      return;
+    }
+
+    setJevBusyId('batch');
+    try {
+      const apiKey = storageService.getApiKey();
+      const provider = storageService.getAiProvider();
+      const model = storageService.getModel();
+
+      const caller = apiKey
+        ? (sys: string, usr: string, temp?: number) =>
+            callAI({ provider, apiKey, model, systemPrompt: sys, userPrompt: usr, temperature: temp })
+        : undefined;
+
+      let nextData = data;
+      const nextVerdicts: Record<string, JevOpportunityVerdict> = { ...jevVerdicts };
+
+      for (const opp of activeOpps) {
+        const proc = nextData.processes.find(p => p.id === opp.processId);
+        const verdict = await evaluateOpportunityWithJev(
+          opp,
+          proc,
+          nextData.premises.loadedHourlyCost,
+          caller
+        );
+        nextVerdicts[opp.id] = verdict;
+        nextData = updateAutomationOpportunity(nextData, opp.id, {
+          solutionType: verdict.solutionChoice.choice,
+          impact: verdict.impactScore.score,
+          effort: verdict.effortScore.score,
+          risk: verdict.riskScore.score,
+          dataReadiness: verdict.dataReadinessScore.score,
+          roadmapWave: verdict.waveChoice.choice
+        });
+      }
+
+      setJevVerdicts(nextVerdicts);
+      commit(nextData);
+      onNotify?.(
+        'success',
+        `Jev em lote concluído: ${activeOpps.length} oportunidade(s) calibrada(s) com notas, solução e onda!`
+      );
+    } finally {
+      setJevBusyId(null);
+    }
+  };
+
   const subTabs: { id: DiscoverySubTab; label: string; badge?: string; icon: React.ReactNode }[] = [
     { id: 'capa', label: '1. Capa & Premissas', icon: <FileSpreadsheet size={15} /> },
     {
@@ -1836,6 +1887,19 @@ export const AutomationDiscoveryView: React.FC<AutomationDiscoveryViewProps> = (
               <Plus size={15} />
               Adicionar Oportunidade
             </button>
+            {data.opportunities.length > 0 && (
+              <button
+                type="button"
+                disabled={jevBusyId !== null}
+                onClick={handleRunJevBatch}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600/20 hover:bg-violet-600/35 border border-violet-500/40 text-violet-200 text-xs font-semibold disabled:opacity-50"
+              >
+                <Sparkles size={14} />
+                {jevBusyId === 'batch'
+                  ? 'Jev decidindo lote...'
+                  : 'Jev em Lote: Decidir Todas as Oportunidades'}
+              </button>
+            )}
           </div>
 
           <div className="space-y-4">

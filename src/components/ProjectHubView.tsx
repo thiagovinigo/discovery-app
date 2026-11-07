@@ -5,16 +5,13 @@ import {
   Target,
   Compass,
   Users,
-  CheckCircle2,
-  Calendar,
   Layers,
   ArrowRight,
-  Flame,
   FileText,
-  LayoutGrid,
   Zap,
   Radio,
-  Bot
+  Bot,
+  Workflow
 } from 'lucide-react';
 
 interface ProjectHubViewProps {
@@ -87,7 +84,15 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => onNavigateToView('interview')}
+            className="btn btn-secondary"
+            style={{ fontSize: '0.8rem' }}
+          >
+            Preencher com Copiloto Entrevistador
+          </button>
           {!isEditing ? (
             <button
               onClick={() => setIsEditing(true)}
@@ -268,6 +273,24 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
             </span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+            <div
+              id="hub-launch-automation-discovery"
+              onClick={() => onNavigateToView('automation_discovery')}
+              className="glass-card"
+              style={{ padding: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid rgba(99, 102, 241, 0.45)', transition: 'all 0.2s' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Workflow size={18} color="#818cf8" />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 800 }}>Discovery IA & Automação</div>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>10 Abas · 4 Números · Motor Jev</span>
+                </div>
+              </div>
+              <ArrowRight size={15} color="#a5b4fc" />
+            </div>
+
             <div
               id="hub-launch-live-room"
               onClick={() => onNavigateToView('live_room')}

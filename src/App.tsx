@@ -69,6 +69,7 @@ import { LiveRoomView } from './components/LiveRoomView';
 import type { RightTab } from './components/LiveRoomView';
 import type { AppView } from './components/Sidebar';
 import { AutomationDiscoveryView } from './components/AutomationDiscoveryView';
+import { getProjectBlueprint, type ProjectBlueprintId } from './services/projectBlueprints';
 import { applySuggestions, assignSpeaker, suggestSpeakers } from './services/speakerService';
 import { generateMinutesWithAI, withMinutes } from './services/minutesService';
 
@@ -326,9 +327,9 @@ export const App: React.FC = () => {
     setActiveView(targetView);
   };
 
-  const handleCreateProject = (name: string, description: string) => {
-    const newProj = create(name, description);
-    setActiveView('project_hub');
+  const handleCreateProject = (name: string, description: string, blueprintId?: ProjectBlueprintId) => {
+    const newProj = create(name, description, blueprintId);
+    setActiveView(blueprintId && blueprintId !== 'blank' ? getProjectBlueprint(blueprintId).recommendedEntryView : 'project_hub');
     showNotice('success', `Projeto "${newProj.name}" criado com sucesso!`);
   };
 
