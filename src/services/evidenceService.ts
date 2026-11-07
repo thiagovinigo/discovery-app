@@ -17,6 +17,10 @@ export interface EvidenceSuggestion {
   timestamp: string;
   sessionId: string;
   sessionTitle: string;
+  /** Confiança calibrada estilo Jev System-One (0..1) na decisão `confirms` vs `contests`. */
+  confidence?: number;
+  /** Justificativa curta da decisão Jev Noul. */
+  rationale?: string;
 }
 
 /** Quantas palavras do item precisam aparecer na fala, e que fração delas, para a fala ser sobre o item. */
@@ -96,6 +100,8 @@ export function suggestEvidence(project: DiscoveryProject): EvidenceSuggestion[]
 
         const key = `${candidate.id}:${stance}`;
         if ((best.get(key)?.shared ?? 0) >= shared) continue;
+        const ratio = shared / candidate.words.size;
+        const confidence = Math.round(Math.min(0.95, 0.55 + ratio * 0.4) * 100) / 100;
         best.set(key, {
           shared,
           suggestion: {
@@ -108,7 +114,9 @@ export function suggestEvidence(project: DiscoveryProject): EvidenceSuggestion[]
             speaker: stakeholderName(project, segment.speakerStakeholderId) ?? segment.speaker,
             timestamp: segment.timestamp,
             sessionId: session.id,
-            sessionTitle: session.title
+            sessionTitle: session.title,
+            confidence,
+            rationale: `Jev Noul (${stance === 'confirms' ? 'YES' : 'NO'} · ${Math.round(confidence * 100)}% conf.)`
           }
         });
       }

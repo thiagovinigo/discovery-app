@@ -40,6 +40,11 @@ export const EvidencePanel: React.FC<EvidencePanelProps> = ({ suggestions, onApp
             <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '3px' }}>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
                 <span className="badge badge-primary" style={{ fontSize: '0.66rem' }}>{s.stance === 'confirms' ? 'Confirma' : 'Contesta'}</span>
+                {typeof s.confidence === 'number' && (
+                  <span style={{ fontSize: '0.66rem', padding: '1px 6px', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.18)', color: '#a5b4fc', fontWeight: 700 }}>
+                    {`Jev Noul: ${Math.round(s.confidence * 100)}% conf.`}
+                  </span>
+                )}
                 <strong>{s.itemTitle}</strong>
                 <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>{`(${s.level})`}</span>
               </div>

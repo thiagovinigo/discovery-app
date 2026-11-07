@@ -811,7 +811,7 @@ export function suggestSolutionTypeForProcess(process: Partial<ProcessSheet>): C
   ) {
     return 'Redesenho de processo';
   }
-  if (/\b(duvida|pergunta|consulta|politica|procedimento|manual|atendimento interno)\b/.test(combined)) {
+  if (/\b(duvida|pergunta|consulta|politica|procedimento|atendimento interno)\b/.test(combined)) {
     return 'Assistente Claude';
   }
   if (/\b(relatorio|dashboard|indicador|kpi|bi|decisao no escuro|fechamento|consolidar planilha)\b/.test(combined) && process.structuredData === 'Sim' && process.documentedRules !== 'Sim') {

@@ -52,6 +52,7 @@ import {
   validatePremisesWeights
 } from '../services/automationDiscoveryService';
 import { callAI } from '../services/aiClient';
+import { evaluateOpportunityWithJev, type JevOpportunityVerdict } from '../services/jevDecisionService';
 import { storageService } from '../services/storageService';
 import type { Proposal } from '../services/backlogProposals';
 import type {
@@ -158,6 +159,8 @@ export const AutomationDiscoveryView: React.FC<AutomationDiscoveryViewProps> = (
   const [inventoryAreaFilter, setInventoryAreaFilter] = useState<string>('Todas');
   const [inventorySolutionFilter, setInventorySolutionFilter] = useState<string>('Todas');
   const [isExtractingFromSession, setIsExtractingFromSession] = useState(false);
+  const [jevBusyId, setJevBusyId] = useState<string | null>(null);
+  const [jevVerdicts, setJevVerdicts] = useState<Record<string, JevOpportunityVerdict>>({});
 
   // Formulários rápidos de adição
   const [newAreaName, setNewAreaName] = useState('');
@@ -240,6 +243,50 @@ export const AutomationDiscoveryView: React.FC<AutomationDiscoveryViewProps> = (
     }
     onProposeToBacklog?.(proposals);
     onNotify?.('success', `${proposals.length} proposta(s) gerada(s) para revisão no Backlog!`);
+  };
+
+  const handleRunJevOnOpportunity = async (oppId: string) => {
+    const opp = data.opportunities.find(o => o.id === oppId);
+    if (!opp) return;
+    const proc = data.processes.find(p => p.id === opp.processId);
+
+    setJevBusyId(oppId);
+    try {
+      const apiKey = storageService.getApiKey();
+      const provider = storageService.getAiProvider();
+      const model = storageService.getModel();
+
+      const caller = apiKey
+        ? (sys: string, usr: string, temp?: number) =>
+            callAI({ provider, apiKey, model, systemPrompt: sys, userPrompt: usr, temperature: temp })
+        : undefined;
+
+      const verdict = await evaluateOpportunityWithJev(
+        opp,
+        proc,
+        data.premises.loadedHourlyCost,
+        caller
+      );
+      setJevVerdicts(prev => ({ ...prev, [oppId]: verdict }));
+
+      commit(
+        updateAutomationOpportunity(data, oppId, {
+          solutionType: verdict.solutionChoice.choice,
+          impact: verdict.impactScore.score,
+          effort: verdict.effortScore.score,
+          risk: verdict.riskScore.score,
+          dataReadiness: verdict.dataReadinessScore.score,
+          roadmapWave: verdict.waveChoice.choice
+        })
+      );
+
+      onNotify?.(
+        'success',
+        `Jev (${verdict.source === 'ai' ? 'IA' : 'System-One Local'} · ${Math.round(verdict.overallConfidence * 100)}% conf.): ${verdict.goVerdict.answer.toUpperCase()} — Onda ${verdict.waveChoice.choice}.`
+      );
+    } finally {
+      setJevBusyId(null);
+    }
   };
 
   const subTabs: { id: DiscoverySubTab; label: string; badge?: string; icon: React.ReactNode }[] = [
@@ -1826,6 +1873,16 @@ export const AutomationDiscoveryView: React.FC<AutomationDiscoveryViewProps> = (
                       </span>
                       <button
                         type="button"
+                        disabled={jevBusyId === opp.id}
+                        onClick={() => handleRunJevOnOpportunity(opp.id)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-200 text-[11px] font-semibold transition"
+                        title="Jev (System One): decide tipo de solução (Choice), 4 notas de 1 a 5 (Score), Onda e Veredito GO/NO-GO (Noul) com grau de confiança"
+                      >
+                        <Sparkles size={12} />
+                        {jevBusyId === opp.id ? 'Jev decidindo...' : 'Jev: Decidir Notas & Onda'}
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => commit(removeAutomationOpportunity(data, opp.id))}
                         className="text-slate-400 hover:text-rose-400 p-1"
                       >
@@ -1833,6 +1890,35 @@ export const AutomationDiscoveryView: React.FC<AutomationDiscoveryViewProps> = (
                       </button>
                     </div>
                   </div>
+
+                  {jevVerdicts[opp.id] && (
+                    <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-indigo-500/30 text-indigo-200 font-bold text-[10px]">
+                          JEV SYSTEM-ONE ({jevVerdicts[opp.id].source === 'ai' ? 'IA' : 'LOCAL'})
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                            jevVerdicts[opp.id].goVerdict.answer === 'yes'
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : jevVerdicts[opp.id].goVerdict.answer === 'null'
+                                ? 'bg-amber-500/20 text-amber-300'
+                                : 'bg-rose-500/20 text-rose-300'
+                          }`}
+                        >
+                          NOUL: {jevVerdicts[opp.id].goVerdict.answer.toUpperCase()} (
+                          {Math.round(jevVerdicts[opp.id].overallConfidence * 100)}% conf.)
+                        </span>
+                        <span className="text-slate-300">
+                          {jevVerdicts[opp.id].goVerdict.rationale}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-indigo-300">
+                        Choice: <strong>{jevVerdicts[opp.id].solutionChoice.choice}</strong> →{' '}
+                        <strong>{jevVerdicts[opp.id].waveChoice.choice}</strong>
+                      </span>
+                    </div>
+                  )}
 
                   {row.exceeds80PercentWarning && (
                     <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs">
