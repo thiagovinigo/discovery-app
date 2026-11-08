@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { GitBranch, Maximize2, RefreshCw, Sparkles, Trash2, ZoomIn, ZoomOut, Download, Plus } from 'lucide-react';
+import { GitBranch, Maximize2, RefreshCw, Sparkles, Trash2, ZoomIn, ZoomOut, Download, Plus, ListChecks } from 'lucide-react';
 import type { MindMapNode } from '../types/discovery';
 import { mindMapBounds, NODE_COLORS, ROOT_ID } from '../services/mindMapService';
 
@@ -8,6 +8,8 @@ interface MindMapCanvasProps {
   onRename?: (nodeId: string, label: string) => void;
   onAddChild?: (parentId: string, label: string) => void;
   onDelete?: (nodeId: string) => void;
+  /** Envia um nó refinado do mapa mental direto como proposta de História BDD para o Backlog. */
+  onPromoteToBacklog?: (nodeId: string) => void;
   /** Refaz o mapa com o que a conversa tem agora, sem IA. */
   onRefresh?: () => void;
   onTriggerAnalysis?: () => void;
@@ -54,9 +56,10 @@ interface DetailProps {
   onRename?: (nodeId: string, label: string) => void;
   onAddChild?: (parentId: string, label: string) => void;
   onDelete?: (nodeId: string) => void;
+  onPromoteToBacklog?: (nodeId: string) => void;
 }
 
-const NodeDetail: React.FC<DetailProps> = ({ node, onRename, onAddChild, onDelete }) => {
+const NodeDetail: React.FC<DetailProps> = ({ node, onRename, onAddChild, onDelete, onPromoteToBacklog }) => {
   const [name, setName] = useState(node.label);
   const [child, setChild] = useState('');
   const [confirming, setConfirming] = useState(false);
@@ -82,6 +85,17 @@ const NodeDetail: React.FC<DetailProps> = ({ node, onRename, onAddChild, onDelet
         </blockquote>
       )}
       {node.notes && <p style={{ margin: 0, color: 'var(--text-muted)', lineHeight: 1.4 }}>{node.notes}</p>}
+
+      {onPromoteToBacklog && node.id !== ROOT_ID && node.type !== 'root' && (
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ padding: '6px 10px', fontSize: '0.75rem', gap: '6px', justifyContent: 'center', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)' }}
+          onClick={() => onPromoteToBacklog(node.id)}
+        >
+          <ListChecks size={13} /> Enviar Nó para o Backlog (História BDD)
+        </button>
+      )}
 
       {onRename && (
         <div style={{ display: 'flex', gap: '6px' }}>
@@ -136,7 +150,16 @@ const NodeDetail: React.FC<DetailProps> = ({ node, onRename, onAddChild, onDelet
   );
 };
 
-export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({ nodes, onRename, onAddChild, onDelete, onRefresh, onTriggerAnalysis, isAnalyzing = false }) => {
+export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({
+  nodes,
+  onRename,
+  onAddChild,
+  onDelete,
+  onPromoteToBacklog,
+  onRefresh,
+  onTriggerAnalysis,
+  isAnalyzing = false
+}) => {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -299,10 +322,17 @@ export const MindMapCanvas: React.FC<MindMapCanvasProps> = ({ nodes, onRename, o
 
         <div style={{ flex: '1 1 220px', minWidth: 0, padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-subtle)', background: 'rgba(255,255,255,0.02)', overflowY: 'auto' }}>
           {selected ? (
-            <NodeDetail key={`${selected.id}:${selected.label}`} node={selected} onRename={onRename} onAddChild={onAddChild} onDelete={onDelete} />
+            <NodeDetail
+              key={`${selected.id}:${selected.label}`}
+              node={selected}
+              onRename={onRename}
+              onAddChild={onAddChild}
+              onDelete={onDelete}
+              onPromoteToBacklog={onPromoteToBacklog}
+            />
           ) : (
             <p style={{ margin: 0, fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: 1.45 }}>
-              Clique num nó para ver a fala que o originou, renomear, acrescentar uma ideia ou apagar.
+              Clique num nó para ver a fala que o originou, renomear, acrescentar uma ideia, enviar para o Backlog (História BDD) ou apagar.
             </p>
           )}
         </div>

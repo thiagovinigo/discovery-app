@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Sparkles } from 'lucide-react';
 import type { Epic } from '../types/discovery';
 import { contestedItems, validationSummary } from '../services/backlogItemService';
 import { evaluateStoryTenPointChecklist, verifyBacklog } from '../services/verificationService';
@@ -9,6 +9,8 @@ interface BacklogHealthPanelProps {
   epics: Epic[];
   /** Procura nas reuniões falas que confirmam ou contestam itens do backlog. */
   onFindEvidence?: () => void;
+  /** Higieniza automaticamente personas vagas, critérios Gherkin BDD, estimativas, tasks de QA e duplicadas. */
+  onSanitizeBacklog?: () => void;
   /** O que a última mudança do backlog fez; o botão de desfazer só aparece com isto e com `onUndo`. */
   undoLabel?: string;
   onUndo?: () => void;
@@ -21,9 +23,17 @@ interface BacklogHealthPanelProps {
 const cardStyle: React.CSSProperties = { padding: '8px 12px', borderRadius: '8px', background: 'rgba(15, 23, 42, 0.7)', border: '1px solid var(--border-subtle)' };
 
 /** No backlog: quanto dele já foi validado em reunião e quanto está pronto para dev, com as lacunas à vista. */
-export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, onFindEvidence, undoLabel, onUndo, onSliceStory, onMergeDuplicate }) => {
+export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({
+  epics,
+  onFindEvidence,
+  onSanitizeBacklog,
+  undoLabel,
+  onUndo,
+  onSliceStory,
+  onMergeDuplicate
+}) => {
   const validation = useMemo(() => validationSummary(epics), [epics]);
-  const duplicates = useMemo(() => (onMergeDuplicate ? findDuplicateStories(epics) : []), [epics, onMergeDuplicate]);
+  const duplicates = useMemo(() => (onMergeDuplicate || onSanitizeBacklog ? findDuplicateStories(epics) : []), [epics, onMergeDuplicate, onSanitizeBacklog]);
   const verification = useMemo(() => verifyBacklog(epics), [epics]);
   const contested = useMemo(() => contestedItems(epics), [epics]);
   const storyById = useMemo(() => {
@@ -51,7 +61,7 @@ export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, o
   return (
     <section className="glass-panel" aria-label="Saúde do backlog" style={{ padding: '12px 14px', margin: '12px 0', display: 'flex', flexDirection: 'column', gap: '10px' }}>
       <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <ShieldCheck size={15} color="var(--primary)" /> Saúde do backlog
+        <ShieldCheck size={15} color="var(--primary)" /> Saúde & Higienização do Backlog
       </h3>
 
       <div aria-label="Validação do backlog" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -63,8 +73,25 @@ export const BacklogHealthPanel: React.FC<BacklogHealthPanelProps> = ({ epics, o
         ))}
       </div>
 
-      {(onFindEvidence || (onUndo && undoLabel)) && (
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {(onSanitizeBacklog || onFindEvidence || (onUndo && undoLabel)) && (
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {onSanitizeBacklog && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{
+                padding: '5px 14px',
+                fontSize: '0.78rem',
+                gap: '6px',
+                background: 'linear-gradient(135deg, #10b981 0%, #6366f1 100%)',
+                border: 'none'
+              }}
+              onClick={onSanitizeBacklog}
+              title="Padroniza personas vagas, completa critérios Gherkin Dado/Quando/Então, adiciona task de QA e mescla duplicadas"
+            >
+              <Sparkles size={13} /> Higienizar Backlog Automaticamente (INVEST + Gherkin)
+            </button>
+          )}
           {onFindEvidence && (
             <button type="button" className="btn btn-secondary" style={{ padding: '4px 12px', fontSize: '0.78rem' }} onClick={onFindEvidence}>
               Buscar evidências nas reuniões

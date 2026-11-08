@@ -1,4 +1,5 @@
 import { logChange, stampOrigin } from './backlogItemService';
+import { newId } from './ids';
 import { plain } from './knowledgeService';
 import type { BacklogData, GeneratedBacklog } from './backlogMerge';
 import type { Epic, Feature, MeetingType, OKR, TechnicalTask, UserStory } from '../types/discovery';
@@ -336,4 +337,132 @@ export function mergeStories(epics: Epic[], keepId: string, dropId: string, opts
             .map(s => (s.id === keepId ? mergeInto(s, drop, opts) : s))
         }
   );
+}
+
+const VAGUE_PERSONA_SET = new Set([
+  'usuario',
+  'usuário',
+  'user',
+  'alguem',
+  'alguém',
+  'pessoa',
+  'cliente generico',
+  'cliente genérico'
+]);
+
+/**
+ * Higieniza automaticamente o backlog inteiro:
+ * 1. Mescla histórias duplicadas na mesma feature;
+ * 2. Substitui personas vagas ("usuário") por uma persona real do projeto;
+ * 3. Preenche critérios Gherkin faltantes ou incompletos (Dado/Quando/Então);
+ * 4. Garante estimativa de pontos e task de QA em todas as histórias.
+ */
+export function sanitizeBacklogEpics(
+  epics: Epic[],
+  opts: ApplyOptions & { defaultPersona?: string }
+): { epics: Epic[]; mergedCount: number; sanitizedStoriesCount: number } {
+  let nextEpics = epics;
+  let mergedCount = 0;
+
+  while (true) {
+    const dupes = findDuplicateStories(nextEpics);
+    if (dupes.length === 0) break;
+    const first = dupes[0];
+    nextEpics = mergeStories(nextEpics, first.keepId, first.dropId, opts);
+    mergedCount++;
+  }
+
+  const fallbackPersona = opts.defaultPersona?.trim() || 'Operador do processo';
+  let sanitizedStoriesCount = 0;
+
+  nextEpics = mapStories(nextEpics, story => {
+    let changed = false;
+    let asA = story.asA?.trim() || '';
+    if (!asA || VAGUE_PERSONA_SET.has(asA.toLowerCase())) {
+      asA = fallbackPersona;
+      changed = true;
+    }
+
+    let iWantTo = story.iWantTo?.trim() || '';
+    if (!iWantTo) {
+      iWantTo = `executar "${story.title}"`;
+      changed = true;
+    }
+
+    let soThat = story.soThat?.trim() || '';
+    if (!soThat) {
+      soThat = 'garantir eficiência operacional e rastreabilidade';
+      changed = true;
+    }
+
+    let storyPoints = story.storyPoints;
+    if (storyPoints === undefined || storyPoints <= 0) {
+      storyPoints = 3;
+      changed = true;
+    }
+
+    let acceptanceCriteria = story.acceptanceCriteria.map(ac => {
+      const given = ac.given?.trim() || `que ${asA} acessou o fluxo de "${story.title}"`;
+      const when = ac.when?.trim() || `executa "${iWantTo}"`;
+      const then = ac.then?.trim() || `o sistema valida as regras e conclui para ${soThat}`;
+      if (given !== ac.given || when !== ac.when || then !== ac.then) changed = true;
+      return {
+        ...ac,
+        scenario: ac.scenario?.trim() || `Fluxo principal — ${story.title}`,
+        given,
+        when,
+        then
+      };
+    });
+
+    if (acceptanceCriteria.length === 0) {
+      changed = true;
+      acceptanceCriteria = [
+        {
+          id: newId('ac'),
+          scenario: `Fluxo principal — ${story.title}`,
+          given: `que ${asA} está no contexto da operação`,
+          when: `realiza a ação de ${iWantTo}`,
+          then: `o sistema processa com sucesso garantindo ${soThat}`
+        }
+      ];
+    }
+
+    const tasks = [...story.tasks];
+    if (tasks.length === 0) {
+      changed = true;
+      tasks.push({
+        id: newId('task'),
+        title: `Implementar fluxo principal: ${story.title}`,
+        type: 'backend',
+        status: 'todo',
+        estimatedHours: 4
+      });
+    }
+    if (!tasks.some(t => t.type === 'qa')) {
+      changed = true;
+      tasks.push({
+        id: newId('task'),
+        title: `Validar critérios Gherkin BDD: ${story.title}`,
+        type: 'qa',
+        status: 'todo',
+        estimatedHours: 2
+      });
+    }
+
+    if (!changed) return story;
+    sanitizedStoriesCount++;
+    const updated: UserStory = {
+      ...story,
+      asA,
+      iWantTo,
+      soThat,
+      storyPoints,
+      acceptanceCriteria,
+      tasks
+    };
+    return logChange(updated, 'Higienizada automaticamente (INVEST / Gherkin / QA)', opts.at, opts.sessionId);
+  });
+
+  return { epics: nextEpics, mergedCount, sanitizedStoriesCount };
 }

@@ -7,7 +7,8 @@ import {
   layoutMindMap,
   mindMapBounds,
   renameNode,
-  syncMindMap
+  syncMindMap,
+  proposeMindMapNodeToBacklog
 } from './mindMapService';
 import type { JTBDItem, MeetingSession, MindMapNode, PainPoint, TranscriptSegment } from '../types/discovery';
 
@@ -301,5 +302,29 @@ describe('mindMapBounds', () => {
       expect(n.y).toBeLessThanOrEqual(box.y + box.height);
     }
     expect(box.width).toBeGreaterThanOrEqual(400);
+  });
+});
+
+describe('proposeMindMapNodeToBacklog (E14)', () => {
+  it('converte um nó refinado do Mapa Mental em proposta de história BDD para o backlog', () => {
+    const synced = syncMindMap(
+      session({ painPoints: [pain('p1', 'Conferência manual das planilhas', { quote: 'Perco metade do tempo conferindo' })] }),
+      'Meu Projeto'
+    );
+    const painNode = synced.mindMapNodes.find(n => n.type === 'pain')!;
+    const mockProject: any = {
+      id: 'proj-1',
+      name: 'Meu Projeto',
+      description: 'Desc',
+      okrs: [],
+      epics: [],
+      prd: { title: 'Meu Projeto', problemStatement: '', targetAudience: 'Analista Financeiro', valueProposition: '', inScope: [], outOfScope: [], successMetrics: [], assumptions: [], risksAndMitigations: [] },
+      sessions: [synced]
+    };
+
+    const proposals = proposeMindMapNodeToBacklog(mockProject, synced, painNode.id);
+
+    expect(proposals.length).toBeGreaterThanOrEqual(1);
+    expect(proposals.some(p => p.label.includes('Conferência manual das planilhas') || p.kind === 'add')).toBe(true);
   });
 });

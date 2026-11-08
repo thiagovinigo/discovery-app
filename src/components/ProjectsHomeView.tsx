@@ -201,86 +201,31 @@ export const ProjectsHomeView: React.FC<ProjectsHomeViewProps> = ({
         </div>
       </div>
 
-      {/* Guia Arquitetural: Separação Clara entre Gestão de Projetos e Ferramentas do Projeto */}
-      <div className="glass-panel" style={{ padding: '22px 24px', border: '1px solid rgba(6, 182, 212, 0.35)', background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span className="badge badge-cyan" style={{ fontSize: '0.68rem', fontWeight: 800 }}>ARQUITETURA DE TRABALHO</span>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>Como Funciona a Separação em 2 Ambientes</h3>
-            </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '3px' }}>
-              Gerencie seus projetos nesta página e entre em qualquer um para ter acesso total a todas as ferramentas com IA
-            </p>
+      {/* Fluxo Principal Focado do PO (5 Etapas) */}
+      <div className="glass-panel" style={{ padding: '16px 20px', border: '1px solid rgba(99, 102, 241, 0.35)', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(6, 182, 212, 0.06) 100%)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="badge badge-primary" style={{ fontSize: '0.68rem', fontWeight: 800 }}>FLUXO DO PO</span>
+            <h3 style={{ fontSize: '1rem', fontWeight: 800, margin: 0 }}>Da Reunião e Mapa Mental ao Backlog Higienizado & PRD/SPEC.md</h3>
           </div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Entre em qualquer projeto abaixo para seguir as 5 etapas conectadas
+          </span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '14px' }}>
-          {/* Passo 1 */}
-          <div style={{ padding: '16px', borderRadius: '10px', background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(99, 102, 241, 0.35)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.25)', color: '#a5b4fc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 800 }}>
-                1
-              </div>
-              <div>
-                <span style={{ fontSize: '0.65rem', color: '#a5b4fc', textTransform: 'uppercase', fontWeight: 800 }}>Ambiente 1 · Você está aqui</span>
-                <h4 style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Portal de Gestão de Projetos</h4>
-              </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
+          {[
+            { step: '1. Memória do Projeto', desc: 'Notas, decisões, stakeholders e busca semântica viva entre sessões.', color: '#818cf8' },
+            { step: '2. Voz & Transcrição', desc: 'Grave ao vivo, envie áudio Whisper ou importe transcrições de reuniões.', color: '#f43f5e' },
+            { step: '3. Mapa Mental', desc: 'Gere e refine a árvore de assuntos, dores e JTBDs da conversa.', color: '#c084fc' },
+            { step: '4. Higienizar Backlog', desc: 'Transforme nós em histórias e higienize INVEST, Gherkin BDD e duplicadas.', color: '#10b981' },
+            { step: '5. PRD.md & SPEC.md', desc: 'Exporte o PRD executivo e o SPEC.md pronto para agentes de IA.', color: '#06b6d4' }
+          ].map(item => (
+            <div key={item.step} style={{ padding: '10px 12px', borderRadius: '10px', background: 'rgba(15, 23, 42, 0.72)', border: `1px solid ${item.color}40` }}>
+              <div style={{ fontSize: '0.82rem', fontWeight: 800, color: item.color, marginBottom: '4px' }}>{item.step}</div>
+              <div style={{ fontSize: '0.73rem', color: 'var(--text-muted)', lineHeight: 1.35 }}>{item.desc}</div>
             </div>
-            <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: '1.45', margin: '4px 0 0 0' }}>
-              Crie novas iniciativas com Blueprints estruturados, importe projetos em JSON e acompanhe o resumo de sessões, processos e épicos do portfólio.
-            </p>
-            <div style={{ marginTop: 'auto', paddingTop: '8px' }}>
-              <button
-                onClick={() => setCreating(true)}
-                className="btn btn-secondary"
-                style={{ fontSize: '0.76rem', gap: '6px', width: '100%', justifyContent: 'center' }}
-              >
-                <Plus size={14} /> + Criar Novo Projeto
-              </button>
-            </div>
-          </div>
-
-          {/* Passo 2 */}
-          <div style={{ padding: '16px', borderRadius: '10px', background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(6, 182, 212, 0.35)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(6, 182, 212, 0.25)', color: '#67e8f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 800 }}>
-                2
-              </div>
-              <div>
-                <span style={{ fontSize: '0.65rem', color: '#67e8f9', textTransform: 'uppercase', fontWeight: 800 }}>Transição de Página</span>
-                <h4 style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Entrar no Projeto</h4>
-              </div>
-            </div>
-            <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: '1.45', margin: '4px 0 0 0' }}>
-              Nos cartões abaixo, clique no botão principal <strong>"Entrar no Projeto & Abrir Ferramentas"</strong> ou acesse direto o <strong>Discovery de IA (10 Abas)</strong>.
-            </p>
-            <div style={{ marginTop: 'auto', paddingTop: '8px', fontSize: '0.72rem', color: '#67e8f9', background: 'rgba(6, 182, 212, 0.1)', padding: '6px 10px', borderRadius: '6px' }}>
-              💡 Você pode retornar à Gestão de Projetos a qualquer momento clicando em <strong>[← Gestão de Projetos]</strong>.
-            </div>
-          </div>
-
-          {/* Passo 3 */}
-          <div style={{ padding: '16px', borderRadius: '10px', background: 'rgba(15, 23, 42, 0.7)', border: '1px solid rgba(16, 185, 129, 0.35)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.25)', color: '#6ee7b7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem', fontWeight: 800 }}>
-                3
-              </div>
-              <div>
-                <span style={{ fontSize: '0.65rem', color: '#6ee7b7', textTransform: 'uppercase', fontWeight: 800 }}>Ambiente 2 · Dentro do Projeto</span>
-                <h4 style={{ fontSize: '0.92rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Área de Trabalho & Ferramentas</h4>
-              </div>
-            </div>
-            <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', lineHeight: '1.45', margin: '4px 0 0 0' }}>
-              Ao entrar no projeto, a barra lateral e o cabeçalho ativam todas as ferramentas específicas daquele projeto:
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '4px' }}>
-              <span>🤖 <strong>Discovery IA (10 Abas + Jev):</strong> Processos P-01, Sistemas e Readout</span>
-              <span>🎙️ <strong>Gravações ao Vivo:</strong> Transcrição, dores literais e Mom Test</span>
-              <span>⚡ <strong>Backlog BDD:</strong> Épicos, Stories Given/When/Then e RICE</span>
-              <span>📄 <strong>PRD & SPEC:</strong> Especificações prontas para Cursor/Claude</span>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 

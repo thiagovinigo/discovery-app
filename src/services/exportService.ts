@@ -45,6 +45,46 @@ const traceInline = (item: Parameters<typeof traceLines>[0]): string => {
   return lines.length ? ` | ${lines.join(' | ')}` : '';
 };
 
+/** Sintetiza o Mapa Mental das reuniões e a Memória Viva do Projeto (Notas do PO) para enriquecer PRD.md e SPEC.md. */
+function buildMindMapAndMemorySection(project: DiscoveryProject, lang: 'pt' | 'en'): string {
+  const sessionsWithMap = project.sessions.filter(s => s.mindMapNodes && s.mindMapNodes.some(n => n.type !== 'root'));
+  const notes = project.notes ?? [];
+  if (sessionsWithMap.length === 0 && notes.length === 0) return '';
+
+  let out =
+    lang === 'pt'
+      ? `### Mapa Mental Consolidado & Memória Viva do Projeto\n\n`
+      : `\n### Consolidated Meeting Mind Map & Project Memory\n\n`;
+
+  for (const session of sessionsWithMap) {
+    const topics = session.mindMapNodes.filter(n => n.type === 'topic');
+    const loose = session.mindMapNodes.filter(
+      n => n.type !== 'root' && n.type !== 'topic' && !topics.some(t => t.id === n.parentId)
+    );
+    out += `- **${session.title}** (${session.date}):\n`;
+    for (const topic of topics) {
+      out += `  - **Assunto:** ${topic.label}\n`;
+      const children = session.mindMapNodes.filter(n => n.parentId === topic.id);
+      for (const child of children) {
+        out += `    - [${child.type.toUpperCase()}] ${child.label}${child.quote ? ` (*"${child.quote}"*)` : ''}\n`;
+      }
+    }
+    for (const item of loose) {
+      out += `  - [${item.type.toUpperCase()}] ${item.label}${item.quote ? ` (*"${item.quote}"*)` : ''}\n`;
+    }
+  }
+
+  if (notes.length > 0) {
+    out += lang === 'pt' ? `\n#### Memória Viva do PO (Notas & Fechamentos)\n` : `\n#### PO Project Memory Notes\n`;
+    for (const note of notes.slice(0, 8)) {
+      const tags = note.tags.length > 0 ? ` [${note.tags.map(t => `#${t}`).join(' ')}]` : '';
+      out += `- **Nota**${tags}: ${note.text.replace(/\s+/g, ' ').trim()}\n`;
+    }
+  }
+
+  return out + `\n`;
+}
+
 export const exportService = {
   exportToJiraCsv(source: DiscoveryProject, options?: ExportOptions): string {
     const project = withoutInvalidated(source, options);
@@ -354,6 +394,7 @@ export const exportService = {
       md += `  - Ainda não há citações de entrevistas registradas.\n`;
     }
     md += `\n`;
+    md += buildMindMapAndMemorySection(project, 'pt');
 
     md += `### Oportunidade de Negócio\n`;
     md += `- **Proposta de Valor:** ${informed(prd.valueProposition)}\n`;
@@ -557,7 +598,6 @@ export const exportService = {
     spec += `5. SECURITY: Validate input at system boundaries and never commit secrets or credentials.\n`;
     spec += `\`\`\`\n\n`;
 
-
     // 2. Contexto do produto: só o que o usuário escreveu no PRD
     spec += `## 2. Product Context\n\n`;
     spec += `- **Problem:** ${provided(prd.problemStatement)}\n`;
@@ -570,6 +610,7 @@ export const exportService = {
     spec += bulletList(prd.outOfScope, item => `- ${item}\n`, NOT_PROVIDED);
     spec += `\n### Technology\n`;
     spec += `Not specified by the product team. Follow the conventions and stack of the existing codebase and do not introduce new frameworks without justification.\n\n`;
+    spec += buildMindMapAndMemorySection(project, 'en');
 
     // 3. Critérios de sucesso, premissas e riscos
     spec += `## 3. Success Criteria, Assumptions & Risks\n\n`;
@@ -629,7 +670,6 @@ export const exportService = {
         });
       });
     });
-
 
     // 5. Verificação: genérica, vale para qualquer projeto
     spec += `## 5. Verification & Completion Checklist\n\n`;

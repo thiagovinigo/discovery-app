@@ -5,7 +5,8 @@ import {
   mergeStories,
   planBacklogProposals,
   proposalsForMeetingType,
-  sameTitle
+  sameTitle,
+  sanitizeBacklogEpics
 } from './backlogProposals';
 import type { BacklogData } from './backlogMerge';
 import type { AcceptanceCriteria, Epic, Feature, OKR, TechnicalTask, UserStory } from '../types/discovery';
@@ -259,5 +260,42 @@ describe('findDuplicateStories / mergeStories', () => {
 
   it('ids desconhecidos não mudam nada', () => {
     expect(mergeStories(withDupes(), 'a', 'zzz', NOW)).toEqual(withDupes());
+  });
+});
+
+describe('sanitizeBacklogEpics (E14)', () => {
+  it('mescla duplicadas, substitui persona vaga, completa Gherkin BDD e garante task de QA', () => {
+    const dirty = [
+      epic('E', [
+        feature('F', [
+          story('Emitir nota fiscal automática', {
+            id: 's1',
+            asA: 'usuário',
+            iWantTo: '',
+            soThat: '',
+            storyPoints: undefined,
+            acceptanceCriteria: [],
+            tasks: []
+          }),
+          story('Emitir a nota fiscal automática', {
+            id: 's2',
+            asA: 'usuário',
+            acceptanceCriteria: [criterion('Cenário extra')],
+            tasks: []
+          })
+        ])
+      ])
+    ];
+
+    const result = sanitizeBacklogEpics(dirty, { ...NOW, defaultPersona: 'Analista Fiscal' });
+
+    expect(result.mergedCount).toBe(1);
+    expect(result.sanitizedStoriesCount).toBe(1);
+    const stories = result.epics[0].features[0].userStories;
+    expect(stories).toHaveLength(1);
+    expect(stories[0].asA).toBe('Analista Fiscal');
+    expect(stories[0].storyPoints).toBe(3);
+    expect(stories[0].acceptanceCriteria.length).toBeGreaterThanOrEqual(1);
+    expect(stories[0].tasks.some(t => t.type === 'qa')).toBe(true);
   });
 });

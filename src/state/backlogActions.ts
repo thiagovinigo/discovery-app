@@ -1,7 +1,7 @@
 import { storageService } from '../services/storageService';
 import { geminiService } from '../services/geminiService';
 import { planBacklogMerge } from '../services/backlogMerge';
-import { applyProposals, mergeStories, planBacklogProposals } from '../services/backlogProposals';
+import { applyProposals, mergeStories, planBacklogProposals, sanitizeBacklogEpics } from '../services/backlogProposals';
 import { changeWithSnapshot, lastSnapshot, undoLast } from '../services/backlogHistoryService';
 import { applyEvidence, suggestEvidence } from '../services/evidenceService';
 import type { EvidenceSuggestion } from '../services/evidenceService';
@@ -66,6 +66,38 @@ export function createBacklogActions(deps: BacklogActionsDeps) {
       changeWithSnapshot(p, 'Mesclou histórias duplicadas', at, q => ({ ...q, epics: mergeStories(q.epics, keepId, dropId, { at, sessionId: session?.id }) }))
     );
     showNotice('success', `Histórias mescladas. ${UNDO_HINT}`);
+  };
+
+  const handleSanitizeBacklog = () => {
+    const at = new Date().toISOString();
+    const defaultPersona =
+      project.stakeholders?.[0]?.role?.trim() ||
+      project.stakeholders?.[0]?.name?.trim() ||
+      project.prd?.targetAudience?.split(/[,.]/)[0]?.trim() ||
+      'Operador do processo';
+    const preview = sanitizeBacklogEpics(project.epics, { at, sessionId: session?.id, defaultPersona });
+    if (preview.mergedCount === 0 && preview.sanitizedStoriesCount === 0) {
+      showNotice('info', 'O backlog já está higienizado (personas específicas, Gherkin BDD, estimativas e QA completos).');
+      return;
+    }
+    update(project.id, p =>
+      changeWithSnapshot(
+        p,
+        `Higienizou backlog (${preview.sanitizedStoriesCount} história(s) ajustada(s), ${preview.mergedCount} duplicada(s) mesclada(s))`,
+        at,
+        q => ({
+          ...q,
+          epics: sanitizeBacklogEpics(q.epics, { at, sessionId: session?.id, defaultPersona }).epics
+        })
+      )
+    );
+    showNotice(
+      'success',
+      `Backlog higienizado: ${preview.sanitizedStoriesCount} história(s) padronizada(s) (INVEST/Gherkin/QA)`
+    );
+  };
+
+  const _noopMergeTail = () => {
   };
 
   const handleUndoBacklog = () => {
@@ -161,6 +193,7 @@ export function createBacklogActions(deps: BacklogActionsDeps) {
   return {
     handleSliceStory,
     handleMergeDuplicate,
+    handleSanitizeBacklog,
     handleUndoBacklog,
     handleFindEvidence,
     handleApplyEvidence,

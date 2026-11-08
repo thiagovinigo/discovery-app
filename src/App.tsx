@@ -24,6 +24,7 @@ import {
 } from './services/sessionService';
 import { generateJourneyWithAI } from './services/journeyService';
 import { proposeStoryMapToBacklog, syncStoryMap } from './services/storyMapService';
+import { proposeMindMapNodeToBacklog } from './services/mindMapService';
 import { buildOfflinePrototype, generatePrototypeWithAI } from './services/prototypeService';
 import { buildWhisperPrompt } from './services/whisperFilter';
 import { useProjects } from './state/useProjects';
@@ -748,6 +749,25 @@ export const App: React.FC = () => {
     showNotice('success', `${proposals.length} propostas do Story Map enviadas para revisão do backlog!`);
   };
 
+  const handleProposeMindMapNodeToBacklog = (nodeId: string) => {
+    if (!currentSession) return;
+    const proposals = proposeMindMapNodeToBacklog(activeProject, currentSession, nodeId);
+    if (proposals.length === 0) {
+      showNotice('info', 'Este nó do Mapa Mental já consta no backlog.');
+      return;
+    }
+    setPendingReview({
+      projectId: activeProject.id,
+      sessionId: currentSession.id,
+      type: currentSession.type,
+      proposals
+    });
+    setActiveView('backlog');
+    showNotice('success', 'Nó do Mapa Mental transformado em proposta de História BDD! Revise e aplique ao backlog.');
+  };
+  const _noopStoryMapEnd = () => {
+  };
+
   const handleGenerateOfflinePrototype = () => {
     if (!currentSession) return;
     const proto = buildOfflinePrototype(currentSession, activeProject.name);
@@ -810,6 +830,7 @@ export const App: React.FC = () => {
   const {
     handleSliceStory,
     handleMergeDuplicate,
+    handleSanitizeBacklog,
     handleUndoBacklog,
     handleFindEvidence,
     handleApplyEvidence,
@@ -888,6 +909,10 @@ export const App: React.FC = () => {
         {activeView === 'project_hub' && (
           <ProjectHubView
             key={activeProject.id}
+            onOpenMindMap={() => {
+              setActiveRightTab('mindmap');
+              setActiveView('live_room');
+            }}
             project={activeProject}
             onUpdateProject={(updated) => {
               saveProject(updated);
@@ -1030,6 +1055,7 @@ export const App: React.FC = () => {
             onRefreshJourneyAI={handleRefreshJourneyAI}
             onRefreshStoryMap={handleRefreshStoryMap}
             onProposeStoryMapToBacklog={handleProposeStoryMapToBacklog}
+            onProposeMindMapNodeToBacklog={handleProposeMindMapNodeToBacklog}
             onGenerateOfflinePrototype={handleGenerateOfflinePrototype}
             onGenerateAIPrototype={handleGenerateAIPrototype}
             onGenerateMinutes={handleGenerateMinutes}
@@ -1100,6 +1126,7 @@ export const App: React.FC = () => {
           <BacklogHealthPanel
             epics={activeProject.epics}
             onFindEvidence={handleFindEvidence}
+            onSanitizeBacklog={handleSanitizeBacklog}
             undoLabel={lastSnapshot(activeProject)?.label}
             onUndo={handleUndoBacklog}
             onSliceStory={setSlicingStoryId}

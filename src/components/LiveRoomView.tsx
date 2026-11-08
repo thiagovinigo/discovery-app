@@ -108,6 +108,7 @@ export interface LiveRoomViewProps {
   onRefreshJourneyAI?: () => void;
   onRefreshStoryMap: () => void;
   onProposeStoryMapToBacklog: (release: StoryMapRelease | 'all') => void;
+  onProposeMindMapNodeToBacklog?: (nodeId: string) => void;
   onGenerateOfflinePrototype: () => void;
   onGenerateAIPrototype: () => void;
   onGenerateMinutes: () => void;
@@ -160,6 +161,7 @@ export const LiveRoomView: React.FC<LiveRoomViewProps> = ({
   onRefreshJourneyAI,
   onRefreshStoryMap,
   onProposeStoryMapToBacklog,
+  onProposeMindMapNodeToBacklog,
   onGenerateOfflinePrototype,
   onGenerateAIPrototype,
   onGenerateMinutes,
@@ -408,6 +410,7 @@ export const LiveRoomView: React.FC<LiveRoomViewProps> = ({
                 onRename={(id, label) => onEditSession(s => renameNode(s, id, label))}
                 onAddChild={(parentId, label) => onEditSession(s => addChildNode(s, parentId, label))}
                 onDelete={id => onEditSession(s => deleteNode(s, id))}
+                onPromoteToBacklog={onProposeMindMapNodeToBacklog}
                 onRefresh={onRefreshMap}
                 onTriggerAnalysis={onAnalyzeSessionWithAI}
                 isAnalyzing={isAnalyzingLive}

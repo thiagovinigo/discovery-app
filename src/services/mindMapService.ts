@@ -2,7 +2,8 @@ import { newId } from './ids';
 import { plain, tokens } from './knowledgeService';
 import { extractTopics } from './topicService';
 import type { SessionTopic } from './topicService';
-import type { MeetingSession, MindMapEdge, MindMapNode, Stakeholder, TranscriptSegment } from '../types/discovery';
+import type { DiscoveryProject, Epic, Feature, MeetingSession, MindMapEdge, MindMapNode, Stakeholder, TranscriptSegment, UserStory } from '../types/discovery';
+import type { Proposal } from './backlogProposals';
 
 export const ROOT_ID = 'm-root';
 /** Prefixo dos nós que a análise cria sozinha; o que o usuário escreve nunca usa esse prefixo. */
@@ -296,4 +297,164 @@ export function deleteNode(session: MeetingSession, nodeId: string): MeetingSess
   const removed = session.mindMapNodes.filter(n => !keptIds.has(n.id)).map(n => n.id);
   const hidden = [...new Set([...(session.mindMapHiddenIds ?? []), ...removed.filter(id => id.startsWith(DERIVED_PREFIX))])];
   return withLayout(session, remaining, hidden);
+}
+
+/**
+ * Converte um nó do Mapa Mental (dor, job, oportunidade, solução ou assunto) em uma proposta estruturada
+ * de User Story BDD pronta para revisão no Backlog, preservando a citação de evidência da reunião.
+ */
+export function proposeMindMapNodeToBacklog(
+  project: DiscoveryProject,
+  session: MeetingSession,
+  nodeId: string
+): Proposal[] {
+  const node = session.mindMapNodes.find(n => n.id === nodeId);
+  if (!node || node.type === 'root') return [];
+
+  const parentTopic = session.mindMapNodes.find(n => n.id === node.parentId);
+  const topicLabel =
+    node.type === 'topic'
+      ? node.label
+      : parentTopic && parentTopic.type === 'topic'
+      ? parentTopic.label
+      : 'Refinamento de Reunião';
+
+  const fullText = (node.notes?.trim() || node.label.trim()).replace(/…$/, '');
+  const persona = node.speaker || project.stakeholders?.[0]?.name || 'Responsável da operação';
+
+  const storyId = newId('story');
+  const story: UserStory = {
+    id: storyId,
+    featureId: '',
+    title: shorten(node.label),
+    asA: persona,
+    iWantTo:
+      node.type === 'pain'
+        ? `eliminar o gargalo "${fullText}"`
+        : node.type === 'jtbd'
+        ? fullText
+        : `implementar "${fullText}"`,
+    soThat:
+      node.type === 'pain'
+        ? `reduzir retrabalho e falha operacional identificados em "${session.title}"`
+        : `atender à necessidade mapeada no assunto "${topicLabel}"`,
+    storyPoints: 3,
+    domain: 'core',
+    ...(node.quote
+      ? {
+          evidenceQuote: {
+            speaker: node.speaker || 'Entrevista de Discovery',
+            text: node.quote
+          },
+          validation: {
+            status: 'validated',
+            evidences: [
+              {
+                stance: 'confirms',
+                quote: node.quote,
+                sessionId: session.id,
+                sessionTitle: session.title,
+                timestamp: node.timestamp,
+                at: new Date().toISOString()
+              }
+            ]
+          }
+        }
+      : {}),
+    acceptanceCriteria: [
+      {
+        id: newId('ac'),
+        scenario: `Fluxo principal — ${shorten(node.label)}`,
+        given: `que ${persona} está atuando em "${topicLabel}"`,
+        when: `executa a ação relacionada a "${fullText}"`,
+        then: `o sistema conclui o fluxo sem retrabalho manual e registra o resultado`
+      },
+      {
+        id: newId('ac'),
+        scenario: `Tratamento de exceção — ${shorten(node.label)}`,
+        given: `que ocorra um dado incompleto ou divergência em "${topicLabel}"`,
+        when: `o sistema valida a entrada`,
+        then: `exibe alerta claro orientando a correção sem perder o progresso`
+      }
+    ],
+    tasks: [
+      {
+        id: newId('task'),
+        title: `Implementar regra e fluxo para: ${shorten(node.label)}`,
+        type: 'backend',
+        status: 'todo',
+        estimatedHours: 4
+      },
+      {
+        id: newId('task'),
+        title: `Validar cenários BDD Gherkin (${shorten(node.label)})`,
+        type: 'qa',
+        status: 'todo',
+        estimatedHours: 2
+      }
+    ]
+  };
+
+  const firstEpic = project.epics[0];
+  const firstFeature = firstEpic?.features[0];
+
+  if (firstEpic && firstFeature) {
+    const storyWithFeature: UserStory = { ...story, featureId: firstFeature.id };
+    return [
+      {
+        id: `add:story:${firstFeature.id}:${plain(story.title).trim()}`,
+        kind: 'add',
+        level: 'story',
+        label: story.title,
+        parentId: firstFeature.id,
+        parentLabel: firstFeature.title,
+        item: storyWithFeature
+      }
+    ];
+  }
+
+  const featId = newId('feat');
+  const epicId = firstEpic?.id ?? newId('epic');
+  const featureItem: Feature = {
+    id: featId,
+    epicId,
+    title: `Refinamento: ${topicLabel}`,
+    description: `Originado do Mapa Mental da sessão "${session.title}".`,
+    valueProposition: `Resolver dores e oportunidades do tópico ${topicLabel}.`,
+    effort: 'M',
+    userStories: [{ ...story, featureId: featId }]
+  };
+
+  if (firstEpic) {
+    return [
+      {
+        id: `add:feature:${firstEpic.id}:${plain(featureItem.title).trim()}`,
+        kind: 'add',
+        level: 'feature',
+        label: featureItem.title,
+        parentId: firstEpic.id,
+        parentLabel: firstEpic.title,
+        item: featureItem
+      }
+    ];
+  }
+
+  const epicItem: Epic = {
+    id: epicId,
+    title: `Épico: ${topicLabel}`,
+    objective: `Atender aos pontos mapeados na sessão "${session.title}"`,
+    businessValue: `Entrega de valor validada na árvore do Mapa Mental`,
+    status: 'discovery',
+    features: [featureItem]
+  };
+
+  return [
+    {
+      id: `add:epic:root:${plain(epicItem.title).trim()}`,
+      kind: 'add',
+      level: 'epic',
+      label: epicItem.title,
+      item: epicItem
+    }
+  ];
 }

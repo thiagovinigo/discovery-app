@@ -10,7 +10,8 @@ import {
   FileText,
   Zap,
   Radio,
-  Bot,
+  Brain,
+  GitBranch,
   Workflow
 } from 'lucide-react';
 
@@ -18,6 +19,7 @@ interface ProjectHubViewProps {
   project: DiscoveryProject;
   onUpdateProject: (updated: DiscoveryProject) => void;
   onNavigateToView: (view: any) => void;
+  onOpenMindMap?: () => void;
 }
 
 /** Marca um campo que o usuário ainda não preencheu, em vez de mostrar texto de preenchimento como se fosse conteúdo. */
@@ -30,7 +32,8 @@ const NotInformed: React.FC = () => (
 export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
   project,
   onUpdateProject,
-  onNavigateToView
+  onNavigateToView,
+  onOpenMindMap
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(project.name);
@@ -56,6 +59,17 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
     setIsEditing(false);
   };
 
+  const totalNotes = (project.notes ?? []).length + (project.decisionLog ?? []).length;
+  const totalTranscriptSegments = project.sessions.reduce((acc, s) => acc + s.rawTranscript.length, 0);
+  const totalMindMapNodes = project.sessions.reduce(
+    (acc, s) => acc + s.mindMapNodes.filter(n => n.type !== 'root').length,
+    0
+  );
+  const totalStories = project.epics.reduce(
+    (acc, e) => acc + e.features.reduce((fAcc, f) => fAcc + f.userStories.length, 0),
+    0
+  );
+
   return (
     <div className="glass-panel" style={{ padding: '24px', display: 'flex', flexDirection: 'column', height: '100%', minHeight: '600px' }}>
       {/* Top Header */}
@@ -75,11 +89,11 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
           </div>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Hub do Projeto & Produto Inicial</h2>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Hub do Projeto & Fluxo do PO</h2>
               <span className="badge badge-primary">Iniciativa Ativa</span>
             </div>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-              Visão estratégica, escopo do MVP, metas do produto e conexão com artefatos de entrega
+              Memória viva do projeto ➔ Voz/Transcrição ➔ Mapa Mental ➔ Refinar & Higienizar Backlog ➔ PRD.md & SPEC.md
             </p>
           </div>
         </div>
@@ -115,6 +129,123 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
 
       {/* Main Content Form / Display */}
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', paddingRight: '4px' }}>
+        {/* 5-Step Focused PO Workflow Pipeline */}
+        <section
+          aria-label="Fluxo principal do PO"
+          style={{
+            padding: '16px 18px',
+            borderRadius: '14px',
+            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(15, 23, 42, 0.9) 100%)',
+            border: '1px solid rgba(99, 102, 241, 0.35)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#a5b4fc' }}>
+              Fluxo Principal do PO (5 Etapas Conectadas)
+            </span>
+            <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+              Clique em qualquer etapa para avançar no refinamento
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(195px, 1fr))', gap: '10px' }}>
+            {/* Step 1: Project Memory */}
+            <div
+              id="hub-step-memory"
+              onClick={() => onNavigateToView('brain_dashboard')}
+              className="glass-card"
+              style={{ padding: '12px 14px', cursor: 'pointer', border: '1px solid rgba(99, 102, 241, 0.35)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '8px' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="badge badge-primary" style={{ fontSize: '0.65rem' }}>PASSO 1</span>
+                <Brain size={16} color="#818cf8" />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--text-main)' }}>1. Memória do Projeto</div>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '3px 0 0 0', lineHeight: 1.35 }}>
+                  Notas, decisões, stakeholders e busca semântica viva ({totalNotes} registros)
+                </p>
+              </div>
+            </div>
+
+            {/* Step 2: Voice / Recording / Transcript */}
+            <div
+              id="hub-launch-live-room"
+              onClick={() => onNavigateToView('live_room')}
+              className="glass-card"
+              style={{ padding: '12px 14px', cursor: 'pointer', border: '1px solid rgba(244, 63, 94, 0.35)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '8px' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(244, 63, 94, 0.18)', color: '#fda4af' }}>PASSO 2</span>
+                <Radio size={16} color="#f43f5e" />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--text-main)' }}>2. Voz, Gravação & Transcrição</div>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '3px 0 0 0', lineHeight: 1.35 }}>
+                  Microfone ao vivo, áudio Whisper ou importar transcrição ({totalTranscriptSegments} falas)
+                </p>
+              </div>
+            </div>
+
+            {/* Step 3: Mind Map Meeting Refinement */}
+            <div
+              id="hub-step-mindmap"
+              onClick={() => (onOpenMindMap ? onOpenMindMap() : onNavigateToView('live_room'))}
+              className="glass-card"
+              style={{ padding: '12px 14px', cursor: 'pointer', border: '1px solid rgba(168, 85, 247, 0.35)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '8px' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(168, 85, 247, 0.18)', color: '#d8b4fe' }}>PASSO 3</span>
+                <GitBranch size={16} color="#c084fc" />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--text-main)' }}>3. Mapa Mental (Refinar)</div>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '3px 0 0 0', lineHeight: 1.35 }}>
+                  Refine assuntos, dores e JTBDs da reunião e envie nós ao Backlog ({totalMindMapNodes} nós)
+                </p>
+              </div>
+            </div>
+
+            {/* Step 4: Create, Refine & Sanitize Backlog */}
+            <div
+              id="hub-launch-backlog"
+              onClick={() => onNavigateToView('backlog')}
+              className="glass-card"
+              style={{ padding: '12px 14px', cursor: 'pointer', border: '1px solid rgba(16, 185, 129, 0.35)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '8px' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="badge badge-emerald" style={{ fontSize: '0.65rem' }}>PASSO 4</span>
+                <Zap size={16} color="#10b981" />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--text-main)' }}>4. Criar & Higienizar Backlog</div>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '3px 0 0 0', lineHeight: 1.35 }}>
+                  Higienize INVEST, Gherkin BDD, tasks de QA e duplicadas ({totalStories} histórias)
+                </p>
+              </div>
+            </div>
+
+            {/* Step 5: Generate PRD.md & SPEC.md */}
+            <div
+              id="hub-launch-documentation"
+              onClick={() => onNavigateToView('documentation')}
+              className="glass-card"
+              style={{ padding: '12px 14px', cursor: 'pointer', border: '1px solid rgba(6, 182, 212, 0.35)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '8px' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span className="badge" style={{ fontSize: '0.65rem', background: 'rgba(6, 182, 212, 0.18)', color: '#67e8f9' }}>PASSO 5</span>
+                <FileText size={16} color="var(--accent-cyan)" />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 800, color: 'var(--text-main)' }}>5. Gerar PRD.md & SPEC.md</div>
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '3px 0 0 0', lineHeight: 1.35 }}>
+                  Documento executivo + Especificação técnica pronta para IA implementar
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Row 1: Product Pitch & Vision */}
         <div className="glass-card" style={{ padding: '20px', borderLeft: '4px solid var(--primary)' }}>
           <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#a5b4fc', textTransform: 'uppercase', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -262,106 +393,22 @@ export const ProjectHubView: React.FC<ProjectHubViewProps> = ({
           </div>
         </div>
 
-        {/* Row 4: Direct Launchpad to all project tools */}
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>
-              Ferramentas da Área de Trabalho deste Projeto:
-            </span>
-            <span style={{ fontSize: '0.74rem', color: 'var(--text-dim)' }}>
-              Ou navegue pelas etapas na barra lateral ao lado
-            </span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-            <div
-              id="hub-launch-automation-discovery"
-              onClick={() => onNavigateToView('automation_discovery')}
-              className="glass-card"
-              style={{ padding: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid rgba(99, 102, 241, 0.45)', transition: 'all 0.2s' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(99, 102, 241, 0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Workflow size={18} color="#818cf8" />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800 }}>Discovery IA & Automação</div>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>10 Abas · 4 Números · Motor Jev</span>
-                </div>
+        {/* Secondary link for Automation Discovery */}
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          <div
+            id="hub-launch-automation-discovery"
+            onClick={() => onNavigateToView('automation_discovery')}
+            className="glass-card"
+            style={{ flex: '1 1 260px', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid rgba(99, 102, 241, 0.35)' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Workflow size={18} color="#818cf8" />
+              <div>
+                <div style={{ fontSize: '0.84rem', fontWeight: 800 }}>Discovery de IA & Automação (Motor Jev)</div>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>Matriz P×I, 4 Números, árvore determinística/LLM e gerador de épicos</span>
               </div>
-              <ArrowRight size={15} color="#a5b4fc" />
             </div>
-
-            <div
-              id="hub-launch-live-room"
-              onClick={() => onNavigateToView('live_room')}
-              className="glass-card"
-              style={{ padding: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid rgba(244, 63, 94, 0.3)', transition: 'all 0.2s' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(244, 63, 94, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Radio size={18} color="#f43f5e" />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800 }}>Gravações & Entrevistas</div>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Escuta ao vivo e Mom Test</span>
-                </div>
-              </div>
-              <ArrowRight size={15} color="#fda4af" />
-            </div>
-
-            <div
-              id="hub-launch-backlog"
-              onClick={() => onNavigateToView('backlog')}
-              className="glass-card"
-              style={{ padding: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid rgba(16, 185, 129, 0.3)', transition: 'all 0.2s' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Zap size={18} color="#10b981" />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800 }}>Backlog & Histórias BDD</div>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{project.epics.length} Épicos · Given/When/Then</span>
-                </div>
-              </div>
-              <ArrowRight size={15} color="#6ee7b7" />
-            </div>
-
-            <div
-              id="hub-launch-documentation"
-              onClick={() => onNavigateToView('documentation')}
-              className="glass-card"
-              style={{ padding: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid rgba(6, 182, 212, 0.3)', transition: 'all 0.2s' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(6, 182, 212, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <FileText size={18} color="var(--accent-cyan)" />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800 }}>PRD Vivo & SPEC para IA</div>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>Exportação para agentes de IA</span>
-                </div>
-              </div>
-              <ArrowRight size={15} color="var(--accent-cyan)" />
-            </div>
-
-            <div
-              id="hub-launch-agent-studio"
-              onClick={() => onNavigateToView('agent_studio')}
-              className="glass-card"
-              style={{ padding: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: '1px solid rgba(192, 132, 252, 0.3)', transition: 'all 0.2s' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'rgba(192, 132, 252, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Bot size={18} color="#c084fc" />
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.85rem', fontWeight: 800 }}>6 Agentes de IA & Git</div>
-                  <span style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>PO, QA, Arquiteto & Repositório</span>
-                </div>
-              </div>
-              <ArrowRight size={15} color="#c084fc" />
-            </div>
+            <ArrowRight size={15} color="#a5b4fc" />
           </div>
         </div>
       </div>
